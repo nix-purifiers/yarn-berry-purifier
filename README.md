@@ -163,13 +163,19 @@ already built.
 
 ## Projects tried
 
+- prettier at `bed4edbb1cf2a9db4004215b0ce5707cdb02b5d9` (Yarn 4.18.1 from
+  its `yarnPath`, 927 downloads) builds in the sandbox with its own build
+  script, and its installed command formats a file. A flake check builds
+  it from the purifier lockfile in `tests/real-world`.
 - react-dnd at `1de654eb466b9563fa50df070c244d6f3ab43ca7` (Yarn 3.3.1, 2,428
-  downloads). The lock run works. Its documentation site depends on sharp,
-  which downloads libvips in its install script, and on lmdb, whose node-gyp
-  needed distutils; the `workspaces` argument and the setuptools in the
-  default Python came out of this. The build of its library packages fails
-  inside Yarn 3.3.1 while it runs the workspace scripts, which is not yet
-  resolved.
+  downloads) locks. Its documentation site depends on sharp, which
+  downloads libvips in its install script, and on lmdb, whose node-gyp
+  needed distutils. The `workspaces` argument and the setuptools in the
+  default Python came out of this. With `workspaces` set to its library
+  packages, the install fails inside Yarn 3.3.1 with "Cannot read
+  properties of undefined (reading '/build/yarn-source/.pnp.cjs')" on
+  Node.js 22 and 24; the same failure has not been reproduced on a current
+  Yarn release.
 
 ## License
 
