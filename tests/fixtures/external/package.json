@@ -1,0 +1,5 @@
+{
+  "name": "external-repository",
+  "version": "1.0.0",
+  "dependencies": { "portal-dependency": "portal:./vendor/portal-dependency" }
+}

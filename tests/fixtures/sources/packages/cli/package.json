@@ -1,0 +1,14 @@
+{
+  "name": "sources-cli",
+  "version": "1.0.0",
+  "bin": "cli.js",
+  "dependencies": {
+    "@sources/words": "workspace:^",
+    "file-dependency": "file:../../vendor/file-dependency",
+    "file-tarball": "file:../../vendor/file-tarball-1.0.0.tgz",
+    "is-odd": "patch:is-odd@npm%3A3.0.1#~/patches/is-odd.patch",
+    "left-pad": "github:stevemao/left-pad#v1.3.0",
+    "link-dependency": "link:../../vendor/link-dependency",
+    "portal-dependency": "portal:../../vendor/portal-dependency"
+  }
+}

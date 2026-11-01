@@ -1,0 +1,7 @@
+diff --git a/patched.js b/patched.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111
+--- /dev/null
++++ b/patched.js
+@@ -0,0 +1 @@
++module.exports = "patch";
