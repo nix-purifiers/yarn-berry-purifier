@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "contentHash": "sha256-bS4s2kMBu/g8gOTAAN3F7qU0JefT5mnq5lzAm6TCfMA=",
+  "contentHash": "sha256-Kniflx/s/QdR+r2G0NWly+EJlQACFp3oYZuPHwIjvmM=",
   "inputsHash": "sha256-TPXzyG/3piqt99fsJTDTVEOVyvQn1+QRhnUOdNZAOgA=",
   "yarn": {
     "version": "4.18.1",
@@ -11,9 +11,6 @@
     {
       "path": "https/registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz",
       "url": "https://registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz",
-      "mirrors": [
-        "https://registry.npmjs.org/is-number/-/is-number-6.0.0.tgz"
-      ],
       "hash": "sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==",
       "systems": [
         "aarch64-darwin",
@@ -25,9 +22,6 @@
     {
       "path": "https/registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz",
       "url": "https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz",
-      "mirrors": [
-        "https://registry.npmjs.org/is-odd/-/is-odd-3.0.1.tgz"
-      ],
       "hash": "sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==",
       "systems": [
         "aarch64-darwin",
@@ -39,9 +33,6 @@
     {
       "path": "https/registry.yarnpkg.com/kleur/-/kleur-4.1.5.tgz",
       "url": "https://registry.yarnpkg.com/kleur/-/kleur-4.1.5.tgz",
-      "mirrors": [
-        "https://registry.npmjs.org/kleur/-/kleur-4.1.5.tgz"
-      ],
       "hash": "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==",
       "systems": [
         "aarch64-darwin",

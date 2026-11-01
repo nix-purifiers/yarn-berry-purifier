@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "contentHash": "sha256-FFeSNM0U/VNmtvox34MVI2BzRVTLxC7V5dPXyzQ6wdA=",
+  "contentHash": "sha256-5RncHx0rbJ1Q789wBDbpdg7sABhlmu9eCq8RX/8N2s8=",
   "inputsHash": "sha256-vLq2/U02lFeQu4+oRVnF9oI8l+URA0o47nlX3ALUICs=",
   "yarn": {
     "version": "4.18.1",
@@ -11,9 +11,6 @@
     {
       "path": "https/classic.yarnpkg.com/latest.js",
       "url": "https://github.com/yarnpkg/yarn/releases/download/v1.22.22/yarn-1.22.22.js",
-      "mirrors": [
-        "https://classic.yarnpkg.com/latest.js"
-      ],
       "hash": "sha512-iNJ+OAvKncSbPkcaA5bckUT7N3S4uwtvz19FPt4Z/CBMdXWo1L9X0zsUdQyNhcUAWaTpO1AZHBLq/63NXh4ATA==",
       "systems": [
         "aarch64-darwin",
@@ -35,9 +32,6 @@
     {
       "path": "npm-cache/_cacache/content-v2/sha512/09/0a/6758fac3c263f5f923075d986d2ed26ff74ca2c957e5b86b17e62342564ae142d5374d01ec5163c6f7091d93d2e0779c8da4083d8d0128f7408169781630",
       "url": "https://registry.npmjs.org/is-odd/-/is-odd-3.0.1.tgz",
-      "mirrors": [
-        "https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz"
-      ],
       "hash": "sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==",
       "systems": [
         "aarch64-darwin",
@@ -49,9 +43,6 @@
     {
       "path": "npm-cache/_cacache/content-v2/sha512/5a/ed/551de20b04af0a016254022499417f781a6384e39460ebfe77f1f2b08a5a14bb6d4a9dc1246063eaa1bda8499e66513ef7bcb1ab1d08cac3728c3f07c3ce",
       "url": "https://registry.npmjs.org/is-number/-/is-number-6.0.0.tgz",
-      "mirrors": [
-        "https://registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz"
-      ],
       "hash": "sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==",
       "systems": [
         "aarch64-darwin",
@@ -63,9 +54,6 @@
     {
       "path": "yarn-mirror/is-number-6.0.0.tgz",
       "url": "https://registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz",
-      "mirrors": [
-        "https://registry.npmjs.org/is-number/-/is-number-6.0.0.tgz"
-      ],
       "hash": "sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==",
       "systems": [
         "aarch64-darwin",
@@ -77,9 +65,6 @@
     {
       "path": "yarn-mirror/is-odd-3.0.1.tgz",
       "url": "https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz",
-      "mirrors": [
-        "https://registry.npmjs.org/is-odd/-/is-odd-3.0.1.tgz"
-      ],
       "hash": "sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==",
       "systems": [
         "aarch64-darwin",

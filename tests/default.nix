@@ -85,7 +85,6 @@ let
   download = {
     path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
     url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
-    mirrors = [ ];
     hash = "sha512-dKlgKLTrnih8yfGKBozBsVcGe0mS1/aKhCGPevK47XUNBMB+L0qk6zFw3YQnOFqH8dWqP9KNw9V+g1oOw4ew2g==";
     systems = [ "x86_64-linux" ];
   };
@@ -234,14 +233,12 @@ in
           {
             path = "https/registry.yarnpkg.com/@esbuild%2flinux-x64/-/linux-x64-0.25.0.tgz";
             url = "https://registry.yarnpkg.com/@esbuild%2flinux-x64/-/linux-x64-0.25.0.tgz";
-            mirrors = [ ];
             hash = "sha512-9yl91rHw/cpwMCNytUDxwj2XjFpxML0y9HAOH9pNVQDpQrBxHy01Dx+vaMu0N1CKa/RzBD2hB4u//nfc+Sd3Cw==";
             systems = [ "x86_64-linux" ];
           }
           {
             path = "https/registry.yarnpkg.com/@esbuild%2flinux-arm64/-/linux-arm64-0.25.0.tgz";
             url = "https://registry.yarnpkg.com/@esbuild%2flinux-arm64/-/linux-arm64-0.25.0.tgz";
-            mirrors = [ ];
             hash = "sha512-9QAQjTWNDM/Vk2bgBl17yWuZxZNQIF0OUUuPZRKoDtqF2k4EtYbpyiG5/Dk7nqeK6kIJWPYldkOcBqjXjrUlmg==";
             systems = [ "aarch64-linux" ];
           }
@@ -388,7 +385,7 @@ in
       fetched = purifier.fetchEntry {
         inherit pkgs;
         fetchurl = args: args;
-      } (removeAttrs download [ "systems" ]);
+      } (removeAttrs download [ "systems" ] // { mirrors = [ ]; });
     in
     evalCheck "locked-hash" (
       fetched.hash == download.hash

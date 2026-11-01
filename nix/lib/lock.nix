@@ -7,7 +7,8 @@
 #               shared purifier library. A file entry is
 #               { path, url, mirrors, hash }: `path` is where the plugin
 #               looks the URL up, `mirrors` lists other URLs that serve the
-#               same file, and `hash` is its SRI hash. An inline entry,
+#               same file, and `hash` is its SRI hash. The lockfile leaves
+#               out `mirrors`, which follow from the URL. An inline entry,
 #               { path, contents }, holds a small JSON document the install
 #               reads, such as the list of Yarn releases, which changes as
 #               releases appear
@@ -64,7 +65,7 @@ let
   fix = "Run `yarn-berry-purifier lock`.";
 
   # A download entry has a path and the systems that fetch it, and either
-  # the text of a small response or the URL, mirrors and hash of a file.
+  # the text of a small response or the URL and hash of a file.
   validEntry =
     d:
     builtins.isAttrs d
@@ -72,12 +73,24 @@ let
     && builtins.isList (d.systems or null)
     && (
       builtins.isString (d.contents or null)
-      || (
-        builtins.isString (d.url or null)
-        && builtins.isList (d.mirrors or null)
-        && builtins.isString (d.hash or null)
-      )
+      || (builtins.isString (d.url or null) && builtins.isString (d.hash or null))
     );
+
+  # The other URLs that serve a download's file: Yarn's registry and npm's
+  # registry serve the same tarballs at the same paths. The plugin's
+  # registryMirrors has the same rule.
+  mirrorsOf =
+    url:
+    let
+      yarn = "https://registry.yarnpkg.com/";
+      npm = "https://registry.npmjs.org/";
+    in
+    if lib.hasPrefix yarn url then
+      [ (npm + lib.removePrefix yarn url) ]
+    else if lib.hasPrefix npm url then
+      [ (yarn + lib.removePrefix npm url) ]
+    else
+      [ ];
   invalidEntries = builtins.filter (d: !(validEntry d)) (lock.downloads or [ ]);
 
   checked =
@@ -106,9 +119,9 @@ let
     else
       lock;
 
-  forSystem = map (d: removeAttrs d [ "systems" ]) (
-    builtins.filter (d: lib.elem system d.systems) checked.downloads
-  );
+  forSystem = map (
+    d: removeAttrs d [ "systems" ] // lib.optionalAttrs (d ? url) { mirrors = mirrorsOf d.url; }
+  ) (builtins.filter (d: lib.elem system d.systems) checked.downloads);
 in
 {
   downloads = forSystem;

@@ -443,8 +443,8 @@ module.exports = {
                 (contents !== undefined
                   ? { path: urlPath(url), contents, systems: [] }
                   : stable
-                    ? { path: urlPath(url), url: stable, mirrors: [url], hash, systems: [] }
-                    : { path: urlPath(url), url, mirrors: [], hash, systems: [] });
+                    ? { path: urlPath(url), url: stable, hash, systems: [] }
+                    : { path: urlPath(url), url, hash, systems: [] });
               if (!entry.systems.includes(system)) entry.systems.push(system);
               downloads.set(entry.path, entry);
             }
@@ -472,7 +472,7 @@ module.exports = {
             }
             for (const d of found) {
               const known = downloads.get(d.path);
-              const entry = known || { path: d.path, url: d.url, mirrors: [], hash: d.hash, systems: [] };
+              const entry = known || { path: d.path, url: d.url, hash: d.hash, systems: [] };
               for (const system of d.systems) if (!entry.systems.includes(system)) entry.systems.push(system);
               downloads.set(entry.path, entry);
             }
@@ -482,12 +482,11 @@ module.exports = {
           const content = {
             inputsHash: inputsHash(root),
             yarn,
+            // A download's mirrors follow from its URL by the rule of
+            // registryMirrors, which nix/lib/lock.nix applies, so the
+            // lockfile leaves them out.
             downloads: [...downloads.values()]
-              .map((d) =>
-                d.contents !== undefined
-                  ? { ...d, systems: d.systems.sort() }
-                  : { ...d, mirrors: d.mirrors.length > 0 ? d.mirrors : registryMirrors(d.url), systems: d.systems.sort() },
-              )
+              .map((d) => ({ ...d, systems: d.systems.sort() }))
               .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
             repositories,
             npmLocks: [...npmLocks.entries()]
@@ -741,6 +740,7 @@ function writeLock(lockPath, content) {
 
 // Yarn's registry and npm's registry serve the same tarballs at the same
 // paths, so a tarball from either has the other as its mirror.
+// nix/lib/lock.nix applies the same rule to every download's URL.
 function registryMirrors(url) {
   const yarn = "https://registry.yarnpkg.com/";
   const npm = "https://registry.npmjs.org/";
