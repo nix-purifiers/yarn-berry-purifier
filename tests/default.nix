@@ -383,6 +383,28 @@ in
         touch $out
       '';
 
+  # A real-world project, pinned: prettier on Yarn 4.18.1, the release its
+  # .yarnrc.yml names, built by its own build script. The purifier
+  # lockfile, real-world/prettier.lock.json, is the output of
+  # `yarn purifier lock` for the pinned commit.
+  prettier =
+    let
+      project = buildYarnBerryProject {
+        src = pkgs.fetchFromGitHub {
+          owner = "prettier";
+          repo = "prettier";
+          rev = "bed4edbb1cf2a9db4004215b0ce5707cdb02b5d9";
+          hash = "sha256-Gm9jbi8E8AX2366olEPodeBwCJ42RRGnhKr4Wl9u2UM=";
+        };
+        lockFile = ./real-world/prettier.lock.json;
+      };
+    in
+    pkgs.runCommand "prettier-check" { nativeBuildInputs = [ project.packages.prettier ]; } ''
+      printf 'const  a  =  {b:1}\n' > input.js
+      prettier input.js | grep -qx 'const a = { b: 1 };'
+      touch $out
+    '';
+
   # The wrapper builds.
   yarn = withOverlay.yarn-berry-purifier.yarn;
 }
