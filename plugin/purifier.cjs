@@ -33,6 +33,10 @@ const foreign = require("./foreign.cjs");
 // plugin replaces these two placeholders with store paths.
 const NIX_LIB = "@nixLib@";
 const NIXPKGS = "@nixpkgs@";
+// The source of this flake, whose `lib.purifier` output is the shared
+// purifier library that interactive use and publishing build with.
+const FLAKE = "@flake@";
+const PURIFIER = `(builtins.getFlake "path:${FLAKE}").lib.purifier`;
 
 const PLUGIN_NAME = "@nix-purifiers/plugin-yarn-berry-purifier";
 const LOCK_FILE = "yarn-berry-purifier.lock.json";
@@ -109,7 +113,7 @@ function interactiveDownloads() {
         "--out-link",
         link,
         "--expr",
-        `import ${NIX_LIB}/interactive.nix { pkgs = import ${NIXPKGS} { }; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; }`,
+        `import ${NIX_LIB}/interactive.nix { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; }`,
       ],
       { stdio: ["ignore", "inherit", "inherit"], env: { ...process.env, BERRY_PURIFIER_LOCK: lockPath } },
     );
@@ -186,8 +190,8 @@ function wrapNetworkRequest(executor, extra) {
         if (type.includes("json") && response.body.length < 65536) {
           // A small JSON document, such as the list of Yarn releases that
           // `yarn set version` reads, changes as releases appear, so the
-          // lockfile holds its text.
-          fs.appendFileSync(record, `${JSON.stringify({ url: target, text: response.body.toString("utf8") })}\n`);
+          // lockfile holds its text as `contents`.
+          fs.appendFileSync(record, `${JSON.stringify({ url: target, contents: response.body.toString("utf8") })}\n`);
         } else {
           fs.appendFileSync(
             record,
@@ -356,15 +360,15 @@ module.exports = {
                 foreigns.set(foreign.manifestHash(recorded.foreign.manifest), recorded.foreign);
                 continue;
               }
-              const { url, hash, text, stable } = recorded;
+              const { url, hash, contents, stable } = recorded;
               const known = downloads.get(urlPath(url));
-              if (known && (known.hash !== hash || known.text !== text)) {
+              if (known && (known.hash !== hash || known.contents !== contents)) {
                 throw new Error(`yarn-berry-purifier: ${url} served different files during the lock runs`);
               }
               const entry =
                 known ||
-                (text !== undefined
-                  ? { path: urlPath(url), text, systems: [] }
+                (contents !== undefined
+                  ? { path: urlPath(url), contents, systems: [] }
                   : stable
                     ? { path: urlPath(url), url: stable, mirrors: [url], hash, systems: [] }
                     : { path: urlPath(url), url, mirrors: [], hash, systems: [] });
@@ -408,7 +412,7 @@ module.exports = {
             yarn,
             downloads: [...downloads.values()]
               .map((d) =>
-                d.text !== undefined
+                d.contents !== undefined
                   ? { ...d, systems: d.systems.sort() }
                   : { ...d, mirrors: d.mirrors.length > 0 ? d.mirrors : registryMirrors(d.url), systems: d.systems.sort() },
               )
@@ -464,7 +468,7 @@ module.exports = {
                 "--no-link",
                 "--print-out-paths",
                 "--expr",
-                `import ${NIX_LIB}/publish.nix { pkgs = import ${NIXPKGS} { }; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
+                `import ${NIX_LIB}/publish.nix { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
               ],
               {
                 stdio: ["ignore", "pipe", "inherit"],
@@ -500,9 +504,12 @@ module.exports = {
     // the hash of its checkout as nix-prefetch-git reports it, and its raw
     // commit object. A sandboxed build serves the clones from repositories
     // it rebuilds from those.
-    // The raw commit object of `rev`, base64. A build rebuilds the .git
-    // directory of a clone from the checkout and this object, because a
-    // checkout that keeps its .git directory has no reproducible hash.
+    // The commit object of `rev` in the shape of the shared purifier
+    // library: `object` is the raw commit object in base64, and `gitlinks`
+    // lists the submodule commits of its tree as { path, rev }. A build
+    // rebuilds the .git directory of a clone from the checkout and these,
+    // because a checkout that keeps its .git directory has no reproducible
+    // hash.
     function commitObject(url, rev, work) {
       const dir = fs.mkdtempSync(path.join(work, "commit-"));
       const git = (args) => {
@@ -512,7 +519,15 @@ module.exports = {
       };
       git(["init", "-q"]);
       git(["fetch", "-q", "--depth=1", url, rev]);
-      return git(["cat-file", "commit", rev]).toString("base64");
+      const gitlinks = git(["ls-tree", "-r", "-z", rev])
+        .toString("utf8")
+        .split("\0")
+        .filter((line) => line.startsWith("160000 "))
+        .map((line) => {
+          const [meta, linkPath] = line.split("\t");
+          return { path: linkPath, rev: meta.split(" ")[2] };
+        });
+      return { object: git(["cat-file", "commit", rev]).toString("base64"), gitlinks };
     }
 
     async function lockedRepositories(copy, plugins, foreigns, work) {

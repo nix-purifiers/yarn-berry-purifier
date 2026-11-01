@@ -6,12 +6,14 @@
 # package name.
 {
   pkgs,
+  # The `purifier` namespace of the shared library.
+  purifier,
   # The project root.
   src,
   # The name of the package to publish.
   package,
 }:
 let
-  project = pkgs.callPackage ./build-yarn-berry-project.nix { } { inherit src; };
+  project = pkgs.callPackage ./build-yarn-berry-project.nix { inherit purifier; } { inherit src; };
 in
 project.packages.${package}.tarball

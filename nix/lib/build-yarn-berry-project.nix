@@ -35,6 +35,9 @@
   stdenv,
   callPackage,
   fetchurl,
+  # The `purifier` namespace of the shared library, which the overlay
+  # passes from the flake's library.
+  purifier,
   nodejs,
   python3,
   node-gyp,
@@ -152,9 +155,9 @@ let
 
   dependencies = callPackage ./served.nix (
     {
+      inherit purifier;
       inherit (lock)
         downloads
-        texts
         npmLocks
         externals
         repositories

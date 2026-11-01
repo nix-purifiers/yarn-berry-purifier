@@ -11,7 +11,10 @@ For Yarn 1, use
 yarn-berry-purifier follows the design of
 [sbt-nix-backend](https://github.com/nix-purifiers/sbt-purifier): the build
 tool keeps planning the build, a lock run records every download, and Nix
-fetches the downloads and runs the build offline in its sandbox.
+fetches the downloads and runs the build offline in its sandbox. The
+shared library of the nix-purifiers,
+[purifier](https://github.com/nix-purifiers/purifier), fetches the locked
+downloads and git checkouts, and the lockfile records them as its entries.
 
 ## How it works
 
@@ -46,9 +49,10 @@ current `yarn.lock`, and fails with the command to run when it was not.
   `registry.yarnpkg.com` and `registry.npmjs.org` serve as each other's
   mirror.
 - A git dependency on another host is a `git clone`. The lockfile records
-  the URL, the commit, the hash of a checkout and the raw commit object. A
-  build rebuilds a repository with that commit from the checkout and the
-  object, and git's `insteadOf` setting points the clone at it. Yarn clones
+  the URL, the commit, the hash of a checkout, the raw commit object and
+  the commits of its submodules. A build rebuilds a repository with that
+  commit from the checkout and those, and git's `insteadOf` setting points
+  the clone at it. Yarn clones
   without submodules.
 - Yarn packs a git or GitHub dependency by installing it in its
   repository. When the repository is a Yarn project without a `yarn.lock`,

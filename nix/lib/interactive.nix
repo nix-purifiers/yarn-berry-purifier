@@ -7,6 +7,8 @@
 # .yarn/purifier.
 {
   pkgs,
+  # The `purifier` namespace of the shared library.
+  purifier,
   lockFile,
 }:
 let
@@ -18,9 +20,9 @@ let
   };
 in
 pkgs.callPackage ./served.nix {
+  inherit purifier;
   inherit (lock)
     downloads
-    texts
     npmLocks
     externals
     repositories

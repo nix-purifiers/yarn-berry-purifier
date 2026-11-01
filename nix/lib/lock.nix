@@ -3,13 +3,14 @@
 # Reads yarn-berry-purifier.lock.json, which `yarn purifier lock` writes, at
 # evaluation time. It returns
 #
-#   downloads   the files the install fetches on `system`, as
+#   downloads   the files the install fetches on `system`, as entries of the
+#               shared purifier library. A file entry is
 #               { path, url, mirrors, hash }: `path` is where the plugin
 #               looks the URL up, `mirrors` lists other URLs that serve the
-#               same file, and `hash` is its SRI hash
-#   texts       the small JSON documents the install reads, such as the list
-#               of Yarn releases, as { path, text }; they change as releases
-#               appear, so the purifier lockfile holds their text
+#               same file, and `hash` is its SRI hash. An inline entry,
+#               { path, contents }, holds a small JSON document the install
+#               reads, such as the list of Yarn releases, which changes as
+#               releases appear
 #   externals   the yarn.lock files that the lock run resolved for git and
 #               GitHub dependencies whose repositories have none, as
 #               { manifestHash, yarnLock }: `manifestHash` is the SHA-256 of the
@@ -18,9 +19,9 @@
 #               git and GitHub dependencies that name npm in packageManager
 #               and have none, as { manifestHash, packageLock }
 #   repositories the git repositories Yarn clones, as
-#               { path, git = { url, rev, submodules, leaveDotGit }, hash,
-#               remote }: a checkout of commit `rev` with its .git
-#               directory, and `remote`, the URL Yarn clones it from
+#               git entries of the shared purifier library with the extra
+#               field `remote`, the URL Yarn clones the repository from:
+#               a checkout of commit `rev` with its .git directory
 #   yarn        the Yarn release that runs the install: { path } for a
 #               release in the project, which .yarnrc.yml names in yarnPath,
 #               or { version, url, hash } for a release from
@@ -57,7 +58,7 @@ let
     && builtins.isString (d.path or null)
     && builtins.isList (d.systems or null)
     && (
-      builtins.isString (d.text or null)
+      builtins.isString (d.contents or null)
       || (
         builtins.isString (d.url or null)
         && builtins.isList (d.mirrors or null)
@@ -76,7 +77,9 @@ let
     then
       throw "yarn-berry-purifier: ${name} lacks its `downloads` list or its `inputsHash`. Run `yarn purifier lock`."
     else if invalidEntries != [ ] then
-      throw "yarn-berry-purifier: ${name} has a malformed download entry: ${builtins.toJSON (builtins.head invalidEntries)}. Run `yarn purifier lock`."
+      throw "yarn-berry-purifier: ${name} has a malformed download entry at path ${
+        builtins.toJSON ((builtins.head invalidEntries).path or null)
+      }. Run `yarn purifier lock`."
     else if lock.inputsHash != yarnLockHash then
       throw "yarn-berry-purifier: yarn.lock changed since ${baseNameOf (toString lockFile)} was written. Run `yarn purifier lock`."
     else if !(builtins.any (d: lib.elem system d.systems) lock.downloads) && lock.downloads != [ ] then
@@ -90,8 +93,7 @@ let
   );
 in
 {
-  downloads = builtins.filter (d: !(d ? text)) forSystem;
-  texts = builtins.filter (d: d ? text) forSystem;
+  downloads = forSystem;
   inherit (checked) yarn;
   externals = checked.externals or [ ];
   npmLocks = checked.npmLocks or [ ];

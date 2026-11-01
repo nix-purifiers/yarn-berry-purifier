@@ -13,5 +13,6 @@ runCommand "yarn-berry-purifier-plugin" { } ''
   cp ${../../plugin/foreign.cjs} "$out/foreign.cjs"
   substitute ${../../plugin/purifier.cjs} "$out/purifier.cjs" \
     --replace-fail '@nixLib@' ${../../nix/lib} \
-    --replace-fail '@nixpkgs@' ${path}
+    --replace-fail '@nixpkgs@' ${path} \
+    --replace-fail '@flake@' ${../..}
 ''

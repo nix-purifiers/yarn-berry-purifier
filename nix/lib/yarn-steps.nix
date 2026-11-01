@@ -9,7 +9,7 @@
   node,
   # The plugin, which answers Yarn's downloads from `dependencies`.
   plugin,
-  # The downloads, laid out by nix/lib/dependencies.nix.
+  # The directory nix/lib/served.nix lays out.
   dependencies,
   # The Yarn release, as nix/lib/lock.nix returns it.
   yarnRelease,

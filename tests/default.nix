@@ -6,6 +6,9 @@
   pkgs,
   # The flake's default package overlay, which adds buildYarnBerryProject.
   overlay,
+  # The `purifier` namespace of the shared library, from the flake's
+  # library.
+  purifier,
 }:
 let
   inherit (pkgs) lib;
@@ -276,20 +279,22 @@ in
   locked-hash =
     let
       hash = "sha512-dKlgKLTrnih8yfGKBozBsVcGe0mS1/aKhCGPevK47XUNBMB+L0qk6zFw3YQnOFqH8dWqP9KNw9V+g1oOw4ew2g==";
-      tree = pkgs.callPackage ../nix/lib/dependencies.nix {
-        fetchurl = args: args.hash;
-        downloads = [
+      fetched =
+        purifier.fetchEntry
+          {
+            inherit pkgs;
+            fetchurl = args: args;
+          }
           {
             path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
             url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
             mirrors = [ ];
             inherit hash;
-          }
-        ];
-      };
+          };
     in
-    evalCheck "locked-hash" (lib.hasInfix "\t${hash}\n" tree.links)
-      "the fetch of a download expects another hash than the locked one";
+    evalCheck "locked-hash" (
+      fetched.hash == hash
+    ) "the fetch of a download expects another hash than the locked one";
 
   # The install fails when a served file differs from the locked one: Yarn
   # compares each archive with the checksum in yarn.lock.
@@ -310,6 +315,7 @@ in
   interactive =
     let
       served = import ../nix/lib/interactive.nix {
+        inherit purifier;
         pkgs = withOverlay;
         lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
       };
@@ -372,6 +378,7 @@ in
   publish-tarball =
     let
       tarball = import ../nix/lib/publish.nix {
+        inherit purifier;
         pkgs = withOverlay;
         src = ./fixtures/app;
         package = "hello-berry";
@@ -455,8 +462,10 @@ in
           hash: "${lib.fakeHash}",
           remote: "https://git.example.invalid/git-dependency.git"
         }' yarn-berry-purifier.lock.json
-        # The commit object is the locked commit's own.
-        jq -r '.repositories[0].git.commitObject' yarn-berry-purifier.lock.json | base64 -d \
+        # The commit object is the locked commit's own, and the commit has
+        # no submodules.
+        jq -e '.repositories[0].git.commitObject.gitlinks == []' yarn-berry-purifier.lock.json
+        jq -r '.repositories[0].git.commitObject.object' yarn-berry-purifier.lock.json | base64 -d \
           | git hash-object -t commit --stdin | grep -qx 55e425bf63e80624db0138ef7ff3ff32fe4c7ab5
         mkdir -p "$out"
         cp yarn.lock yarn-berry-purifier.lock.json "$out"

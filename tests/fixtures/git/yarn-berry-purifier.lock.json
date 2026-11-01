@@ -15,7 +15,7 @@
         "rev": "55e425bf63e80624db0138ef7ff3ff32fe4c7ab5",
         "submodules": false,
         "leaveDotGit": true,
-        "commitObject": "dHJlZSBjOTQ3NjE3Yzg4NjUzMTVlNTA1OGQxZWYxOGEwODExNjVhNDdkNDk0CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK"
+        "commitObject": { "object": "dHJlZSBjOTQ3NjE3Yzg4NjUzMTVlNTA1OGQxZWYxOGEwODExNjVhNDdkNDk0CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK", "gitlinks": [] }
       },
       "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "remote": "https://git.example.invalid/git-dependency.git"
