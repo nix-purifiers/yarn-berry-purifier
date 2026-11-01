@@ -40,6 +40,9 @@ const NIXPKGS = "@nixpkgs@";
 // purifier library that interactive use and publishing build with.
 const FLAKE = "@flake@";
 const PURIFIER = `(builtins.getFlake "path:${FLAKE}").lib.purifier`;
+// A package set with the overlay of this flake, whose buildYarnBerryProject
+// builds the tarball that `yarn-berry-purifier publish` uploads.
+const PKGS_WITH_OVERLAY = `import ${NIXPKGS} { overlays = [ (builtins.getFlake "path:${FLAKE}").overlays.default ]; }`;
 
 const PLUGIN_NAME = "@nix-purifiers/plugin-yarn-berry-purifier";
 const LOCK_FILE = "yarn-berry-purifier.lock.json";
@@ -583,8 +586,8 @@ module.exports = {
       }
     }
 
-    // `yarn purifier prefetch` realizes in the Nix store what the everyday
-    // loop needs from the purifier lockfile for the current system, and
+    // `yarn purifier prefetch` realizes in the Nix store what the
+    // development loop needs from the purifier lockfile for the current system, and
     // keeps it alive with garbage-collector roots in the .yarn-berry-purifier
     // directory beside the purifier lockfile: the locked downloads, which
     // the plugin then serves to `yarn install`; the
@@ -672,7 +675,7 @@ module.exports = {
                 "--no-link",
                 "--print-out-paths",
                 "--expr",
-                `import ${NIX_LIB}/publish.nix { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
+                `import ${NIX_LIB}/publish.nix { pkgs = ${PKGS_WITH_OVERLAY}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
               ],
               {
                 stdio: ["ignore", "pipe", "inherit"],

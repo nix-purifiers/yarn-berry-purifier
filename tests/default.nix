@@ -11,7 +11,8 @@
   # The `purifier` namespace of the shared library, from the flake's
   # library.
   purifier,
-  # The `yarn-berry-purifier` namespace of the flake's library.
+  # The `yarn-berry-purifier` namespace of the flake's library, which holds
+  # readLock.
   yarn-berry-purifier,
 }:
 let
@@ -21,9 +22,8 @@ let
   inherit (withOverlay.yarn-berry-purifier) plugin;
 
   # Every fixture builds the way a consumer's package does: through the
-  # builder of the flake's library.
-  buildYarnBerryProject =
-    args: yarn-berry-purifier.buildYarnBerryProject ({ pkgs = withOverlay; } // args);
+  # builder that the overlay adds to the package set.
+  inherit (withOverlay) buildYarnBerryProject;
 
   # One package with a build script, a test script, a command, a
   # dependency and a dev dependency, installed with Plug'n'Play.
@@ -164,7 +164,7 @@ let
       touch $out
     '';
 
-  # The everyday loop of fixtures/app with no network: the roots laid out
+  # The development loop of fixtures/app with no network: the roots laid out
   # as `yarn-berry-purifier prefetch` leaves them, from the same
   # derivations, then `yarn install` and the build script through the
   # plugin, with no BERRY_PURIFIER_SERVE. The roots lie in a
@@ -539,8 +539,8 @@ in
   # `nix build --rebuild`, which fails when the second build differs.
   conformance-rebuild = app.packages.hello-berry;
 
-  # After `yarn-berry-purifier prefetch`, the everyday loop of fixtures/app
-  # runs in the sandbox, which has no network.
+  # After `yarn-berry-purifier prefetch`, the development loop of
+  # fixtures/app runs in the sandbox, which has no network.
   conformance-offline = offlineLoop "conformance-offline" false;
 
   # The same loop with the purifier lockfile outside the project: the
@@ -674,7 +674,6 @@ in
   publish-tarball =
     let
       tarball = import ../nix/lib/publish.nix {
-        inherit purifier;
         pkgs = withOverlay;
         src = ./fixtures/app;
         package = "hello-berry";

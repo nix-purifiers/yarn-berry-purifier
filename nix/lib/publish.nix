@@ -2,12 +2,11 @@
 #
 # What `yarn-berry-purifier publish` builds before it publishes: the
 # tarball of one package of the project from the project's `release`, as
-# package.tgz. The command evaluates this file with the project root, the
-# purifier lockfile and the package name.
+# package.tgz. The command evaluates this file with a package set that has
+# the yarn-berry-purifier overlay, the project root, the purifier lockfile
+# and the package name.
 {
   pkgs,
-  # The `purifier` namespace of the shared library.
-  purifier,
   # The project root.
   src,
   # The purifier lockfile.
@@ -16,9 +15,7 @@
   package,
 }:
 let
-  project = import ./build-yarn-berry-project.nix { inherit purifier; } {
-    inherit pkgs src lockFile;
-  };
+  project = pkgs.buildYarnBerryProject { inherit src lockFile; };
   file = (builtins.replaceStrings [ "@" "/" ] [ "" "__" ] package) + ".tgz";
 in
 pkgs.runCommand "yarn-berry-purifier-publish" { } ''

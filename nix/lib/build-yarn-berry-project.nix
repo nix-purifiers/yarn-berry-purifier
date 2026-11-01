@@ -7,16 +7,17 @@
 # downloads, with its hash, and the package.json files name the project's
 # own packages (the root and its workspaces).
 #
-# The flake's library publishes it as
-# `lib.yarn-berry-purifier.buildYarnBerryProject`:
+# The file is a package for callPackage: the first argument set is what it
+# takes from the package set, and the result is the builder. The
+# yarn-berry-purifier overlay (`overlays.default`) adds it to the package
+# set as `buildYarnBerryProject`, so a package written for callPackage
+# takes it like any other dependency:
 #
-#   (yarn-berry-purifier.lib.yarn-berry-purifier.buildYarnBerryProject {
-#     inherit pkgs;
-#     src = ./.;
-#   }).packages.my-app
+#   { buildYarnBerryProject }:
+#   (buildYarnBerryProject { src = ./.; }).packages.my-app
 #
-# The first argument set is what the library overlay passes. The builder
-# returns
+# and `buildYarnBerryProject.override` replaces what it takes from the set.
+# The builder returns
 #
 #   packages.<name>   package <name> of the project, installed with its
 #                     production dependencies under lib/node_modules, with
@@ -31,12 +32,24 @@
 #                     fetches on its system: the downloads, the git
 #                     repositories and the Yarn release
 {
+  lib,
+  stdenv,
+  callPackage,
+  # The package set, which the purifier library's fetchEntry and tree take.
+  pkgs,
+  nodejs,
+  python3,
+  node-gyp,
+  git,
+  autoPatchelfHook,
+  runtimeShell,
+  # The yarn-berry-purifier package scope, whose `plugin` the build loads
+  # into Yarn.
+  yarn-berry-purifier,
   # The `purifier` namespace of the shared library.
   purifier,
 }:
 {
-  # The package set the build takes its tools from.
-  pkgs,
   # The root of the Yarn project.
   src,
   # Replaces fetchers of the purifier library, such as `fetchurl` with one
@@ -51,7 +64,7 @@
   lockFile ? src + "/yarn-berry-purifier.lock.json",
   # The Node.js that runs Yarn and the project's scripts, and that the
   # packages' commands run on.
-  node ? pkgs.nodejs,
+  node ? nodejs,
   # The workspaces to build, by package name, in the order their scripts
   # run, or null for every package of the project. When it is a list, the
   # install covers only these workspaces and their dependencies
@@ -70,8 +83,8 @@
   # older node-gyp releases that packages bundle the distutils module,
   # which Python 3.12 removed.
   nativeBuildInputs ? [
-    (pkgs.python3.withPackages (ps: [ ps.setuptools ]))
-    pkgs.node-gyp
+    (python3.withPackages (ps: [ ps.setuptools ]))
+    node-gyp
   ],
   # Libraries native addons link against.
   buildInputs ? [ ],
@@ -82,8 +95,6 @@
   srcFilter ? null,
 }:
 let
-  inherit (pkgs) lib stdenv;
-
   inherit (stdenv.hostPlatform) system;
 
   # The lock in memory of the purifier contract, which checkLock fails
@@ -167,12 +178,12 @@ let
     filter = if srcFilter != null then srcFilter else defaultSrcFilter;
   };
 
-  dependencies = pkgs.callPackage ./served.nix {
+  dependencies = callPackage ./served.nix {
     inherit purifier fetchers entries;
     inherit (lock) npmLocks externals;
   };
 
-  plugin = pkgs.yarn-berry-purifier.plugin or (pkgs.callPackage ../../pkgs/plugin { });
+  inherit (yarn-berry-purifier) plugin;
 
   steps = import ./yarn-steps.nix {
     inherit
@@ -181,7 +192,7 @@ let
       plugin
       dependencies
       ;
-    inherit (pkgs) runtimeShell;
+    inherit runtimeShell;
     yarnJs =
       if lock.release == null then "./${lock.yarn.path}" else purifier.fetchEntry fetchArgs lock.release;
   };
@@ -200,7 +211,7 @@ let
   # install with --mode=skip-build lays the packages out without running
   # their build scripts; the files are patched in node_modules and
   # .yarn/unplugged, and a second install runs the build scripts.
-  binaryPatching = lib.optionals stdenv.hostPlatform.isLinux [ pkgs.autoPatchelfHook ];
+  binaryPatching = lib.optionals stdenv.hostPlatform.isLinux [ autoPatchelfHook ];
   binaryLibraries = lib.optionals stdenv.hostPlatform.isLinux [ stdenv.cc.cc.lib ];
   patchInstalled = ''
     patchInstalled() {
@@ -253,7 +264,7 @@ let
       src = filteredSrc;
       nativeBuildInputs = [
         node
-        pkgs.git
+        git
       ]
       ++ nativeBuildInputs
       ++ binaryPatching;
@@ -310,7 +321,7 @@ let
     src = filteredSrc;
     nativeBuildInputs = [
       node
-      pkgs.git
+      git
     ]
     ++ nativeBuildInputs
     ++ binaryPatching;
