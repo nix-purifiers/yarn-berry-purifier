@@ -1,46 +1,109 @@
 # yarn-berry-purifier
 
-A Yarn plugin and a Nix builder for projects that use Yarn Berry (Yarn 3
-and later). The plugin records every file Yarn downloads in
-`yarn-berry-purifier.lock.json`, and Nix builds the project in its sandbox
-from that lockfile. The project needs no Nix files of its own. For Yarn 1,
-use [yarn-classic-purifier](https://github.com/nix-purifiers/yarn-classic-purifier).
+yarn-berry-purifier keeps Yarn Berry's development workflow on locked,
+Nix-resolved dependencies. Use the normal build and test commands in your
+working tree; building the project itself in the Nix sandbox is an
+optional next step.
+
+It follows the [purifier contract](https://github.com/nix-purifiers/purifier/blob/main/CONTRACT.md).
+
+## Installation
+
+Install the integration into your Nix profile once:
+
+```sh
+nix profile install 'github:nix-purifiers/yarn-berry-purifier#yarn' 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier'
+```
+
+This installs the `yarn` wrapper. Use it for the locked
+development workflow below. With no purifier lockfile, it warns on standard
+error and runs the ordinary tool with impure resolution.
+
+`nix shell` makes an integration available temporarily instead of installing
+it. Keep using the activation steps below where a project environment or
+prefetched cache is required.
 
 ## Quickstart
 
-In the project, write the purifier lockfile:
+Install Nix, then run the following from your existing project's root.
+The setup prepares the locked dependencies and the integration that
+Yarn Berry's normal commands use:
 
 ```zsh
-nix run 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
+nix develop github:nix-purifiers/yarn-berry-purifier
+yarn-berry-purifier lock
+yarn install
+yarn run build
+yarn test
 ```
 
-We recommend committing `yarn-berry-purifier.lock.json` and `yarn.lock` to
-the project's repository, where the builder and the commands look for them
-by default. Then build from the project's directory, without adding a
-Nix file. The overlay
-`overlays.default` adds one attribute to the package set: the scope
-`yarn-berry-purifier`, made with `lib.makeScope`. The scope holds the
-builder `buildYarnBerryProject`, the command `yarn-berry-purifier`, the
-`yarn` wrapper and the plugin. Replace `my-app` with the package to build:
+Commit the lockfiles that the lock command writes, including the build
+tool's own lockfile when it has one. Keep using the project's usual build,
+test and editor commands with this setup. Nix provides the locked
+dependencies; the development commands above run outside the Nix sandbox.
+No project Nix files are needed for this workflow.
+
+Sandboxed builds of the whole project are an optional
+[next step](#building-the-project-with-nix).
+
+## Development loop
+
+The development loop is Yarn's own commands, run through the flake's `yarn`
+wrapper, which loads the plugin from a temporary home directory's
+`.yarnrc.yml`. `nix develop github:nix-purifiers/yarn-berry-purifier`
+gives a shell with that `yarn`, the `yarn-berry-purifier` command and
+Node.js.
+
+In a project with a purifier lockfile, `yarn install` installs from the
+locked downloads, which Nix builds into the `.yarn-berry-purifier`
+directory beside the purifier lockfile. The scripts of the project run as
+usual with `yarn run`. The `.yarn-berry-purifier` directory belongs in
+`.gitignore`.
+
+A change to the dependencies goes through Yarn with the plugin's serving
+turned off, then a new lock:
 
 ```zsh
-nix build --impure --expr '
-  let
-    purifier = builtins.getFlake "github:nix-purifiers/yarn-berry-purifier";
-    pkgs = import purifier.inputs.nixpkgs {
-      system = builtins.currentSystem;
-      overlays = [ purifier.overlays.default ];
-    };
-  in
-  (pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app'
+BERRY_PURIFIER=0 yarn add left-pad
+yarn-berry-purifier lock
 ```
 
-This uses the purifier's pinned nixpkgs, matching the lock command above.
-To build with ambient `<nixpkgs>` from your Nix search path instead,
-replace `import purifier.inputs.nixpkgs` with `import <nixpkgs>`.
-Both forms need no Nix files in your project. The build tool and language
-versions must match the lockfile; with ambient nixpkgs, lock with the
-purifier from that package set or pass a compatible toolchain to the builder.
+`yarn-berry-purifier lock` keeps Yarn's resolution as `yarn.lock` holds
+it, and writes a `yarn.lock` only for a project that has none, by running
+`yarn install` without build scripts. `yarn-berry-purifier update` updates both lockfiles in one run: it runs
+`yarn up --recursive` for the packages it names, or for every package when
+it names none, which resolves them again to the newest versions their
+ranges in `package.json` allow and leaves the ranges as they are, and then
+relocks the purifier lockfile against the new `yarn.lock`. It takes
+`--lockfile` and `--system` as `lock` does.
+
+```zsh
+yarn-berry-purifier update typescript
+```
+
+The lock run copies the project into `.yarn-berry-purifier/lock-run` at the
+project root and installs it there once for each Nix system it covers, which are
+x86_64-linux, aarch64-linux, x86_64-darwin and aarch64-darwin by default,
+with `supportedArchitectures` set to that system. Each download records the
+systems that fetch it, so a build fetches only the per-platform packages of
+its own system. The lockfile also records the Yarn release: the one that
+`.yarnrc.yml` names in `yarnPath`, or otherwise the release the command
+runs in, from repo.yarnpkg.com. `--system` restricts the lock run to the
+systems it names. A relock of an unchanged project writes the same
+lockfile byte for byte.
+
+`yarn-berry-purifier publish`, run in a workspace, publishes the tarball
+that the sandboxed build packs for it, with the registry, credentials and
+options that `yarn npm publish` uses. `--tarball <file>` publishes a
+tarball that is already built.
+
+## Building the project with Nix
+
+Once the native development workflow is working, you can also build and
+test the whole project in the Nix sandbox. For this step, keep a flake or
+another Nix build definition in the project's repository, or maintain an
+external packaging repository that points at its sources and lockfiles.
+The builder consumes the same lockfiles as the development workflow.
 
 A flake is optional and can live in the project or in another repository:
 
@@ -133,56 +196,29 @@ devShells.${system}.default = pkgs.mkShell {
 };
 ```
 
-## Development loop
+### One-off builds without a project Nix file
 
-The development loop is Yarn's own commands, run through the flake's `yarn`
-wrapper, which loads the plugin from a temporary home directory's
-`.yarnrc.yml`. `nix develop github:nix-purifiers/yarn-berry-purifier`
-gives a shell with that `yarn`, the `yarn-berry-purifier` command and
-Node.js.
-
-In a project with a purifier lockfile, `yarn install` installs from the
-locked downloads, which Nix builds into the `.yarn-berry-purifier`
-directory beside the purifier lockfile. The scripts of the project run as
-usual with `yarn run`. The `.yarn-berry-purifier` directory belongs in
-`.gitignore`.
-
-A change to the dependencies goes through Yarn with the plugin's serving
-turned off, then a new lock:
+For an ad hoc build, the builder can also be evaluated directly from the
+project root. Replace the example package name with one from your project:
 
 ```zsh
-BERRY_PURIFIER=0 yarn add left-pad
-yarn-berry-purifier lock
+nix build --impure --expr '
+  let
+    purifier = builtins.getFlake "github:nix-purifiers/yarn-berry-purifier";
+    pkgs = import purifier.inputs.nixpkgs {
+      system = builtins.currentSystem;
+      overlays = [ purifier.overlays.default ];
+    };
+  in
+  (pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app'
 ```
 
-`yarn-berry-purifier lock` keeps Yarn's resolution as `yarn.lock` holds
-it, and writes a `yarn.lock` only for a project that has none, by running
-`yarn install` without build scripts. `yarn-berry-purifier update` updates both lockfiles in one run: it runs
-`yarn up --recursive` for the packages it names, or for every package when
-it names none, which resolves them again to the newest versions their
-ranges in `package.json` allow and leaves the ranges as they are, and then
-relocks the purifier lockfile against the new `yarn.lock`. It takes
-`--lockfile` and `--system` as `lock` does.
-
-```zsh
-yarn-berry-purifier update typescript
-```
-
-The lock run copies the project into `.yarn-berry-purifier/lock-run` at the
-project root and installs it there once for each Nix system it covers, which are
-x86_64-linux, aarch64-linux, x86_64-darwin and aarch64-darwin by default,
-with `supportedArchitectures` set to that system. Each download records the
-systems that fetch it, so a build fetches only the per-platform packages of
-its own system. The lockfile also records the Yarn release: the one that
-`.yarnrc.yml` names in `yarnPath`, or otherwise the release the command
-runs in, from repo.yarnpkg.com. `--system` restricts the lock run to the
-systems it names. A relock of an unchanged project writes the same
-lockfile byte for byte.
-
-`yarn-berry-purifier publish`, run in a workspace, publishes the tarball
-that the sandboxed build packs for it, with the registry, credentials and
-options that `yarn npm publish` uses. `--tarball <file>` publishes a
-tarball that is already built.
+This uses the purifier's pinned nixpkgs, matching the lock command above.
+To build with ambient `<nixpkgs>` from your Nix search path instead,
+replace `import purifier.inputs.nixpkgs` with `import <nixpkgs>`.
+Both forms need no Nix files in your project. The build tool and language
+versions must match the lockfile; with ambient nixpkgs, lock with the
+purifier from that package set or pass a compatible toolchain to the builder.
 
 ## Working offline
 
@@ -317,6 +353,11 @@ build scripts. node-gyp builds native addons against the headers of the
 Node.js that runs the build.
 
 ## Examples
+
+For day-to-day work on these projects, use the native-tool setup and
+commands in [Quickstart](#quickstart) and [Development loop](#development-loop).
+The Nix expressions below show optional sandboxed packaging of those
+projects.
 
 ### A project in your own repository
 
