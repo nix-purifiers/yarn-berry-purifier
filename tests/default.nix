@@ -164,26 +164,41 @@ let
       touch $out
     '';
 
-  # The everyday loop of fixtures/app with no network: .yarn/purifier laid
-  # out as `yarn-berry-purifier prefetch` leaves it, from the same
+  # The everyday loop of fixtures/app with no network: the roots laid out
+  # as `yarn-berry-purifier prefetch` leaves them, from the same
   # derivations, then `yarn install` and the build script through the
-  # plugin, with no BERRY_PURIFIER_SERVE. `setup` runs in the project
-  # first.
+  # plugin, with no BERRY_PURIFIER_SERVE. The roots lie in a
+  # .yarn-berry-purifier directory beside the purifier lockfile: at the
+  # project root, or, when `external` is true, beside a purifier lockfile
+  # outside the project that YARN_BERRY_PURIFIER_LOCKFILE names.
   offlineLoop =
-    name: setup:
+    name: external:
     pkgs.runCommand name { nativeBuildInputs = [ pkgs.yarn-berry ]; } ''
       ${yarnWithPlugin}
       cp -r ${./fixtures/app} project
       chmod -R u+w project
-      cd project
-      mkdir -p .yarn/purifier
-      ln -s ${servedApp} .yarn/purifier/downloads
+      ${
+        if external then
+          ''
+            mkdir ext
+            mv project/yarn-berry-purifier.lock.json ext/app.lock.json
+            export YARN_BERRY_PURIFIER_LOCKFILE="$PWD/ext/app.lock.json"
+            roots=ext/.yarn-berry-purifier
+          ''
+        else
+          ''
+            roots=project/.yarn-berry-purifier
+          ''
+      }
+      mkdir -p "$roots"
+      ln -s ${servedApp} "$roots/downloads"
       printf '%s' "$(sha256sum ${./fixtures/app/yarn-berry-purifier.lock.json} | cut -d' ' -f1)" \
-        > .yarn/purifier/downloads.stamp
-      ${setup}
+        > "$roots/downloads.stamp"
+      cd project
       yarn install --immutable
       yarn run build
       grep -q 'built by the build script (3 is odd: true)' dist/message.js
+      ${lib.optionalString external "test ! -e .yarn-berry-purifier"}
       touch $out
     '';
 in
@@ -331,21 +346,96 @@ in
       && lock.problems == [ ]
     ) "readLock of fixtures/app gave another lock";
 
-  # Malformed purifier lockfiles fail evaluation: one that holds no
-  # object, one of another version, one without its contentHash, one with
-  # a contentHash of other content, one without its inputsHash, and one
-  # with a download entry without a hash.
-  conformance-malformed = evalCheck "conformance-malformed" (
-    usable (sealed goodLock) yarnLockText
-    && rejected [ ] yarnLockText
-    && rejected (sealed goodLock // { version = 2; }) yarnLockText
-    && rejected (goodLock // { version = 1; }) yarnLockText
-    && rejected (sealed goodLock // { contentHash = yarnLockHash; }) yarnLockText
-    && rejected (sealed (removeAttrs goodLock [ "inputsHash" ])) yarnLockText
-    && rejected (sealed (
-      goodLock // { downloads = [ (removeAttrs download [ "hash" ]) ]; }
-    )) yarnLockText
-  ) "a malformed purifier lockfile evaluated";
+  # Malformed purifier lockfiles are reported: one that holds no object,
+  # one of another version, one without its contentHash, one with a
+  # contentHash of other content, one without its inputsHash, and one with
+  # a download entry without a hash. A file that is not JSON at all cannot
+  # become a problem, because Nix cannot catch a parse error; readLock then
+  # fails evaluation with an error context that names the command to run,
+  # and the commands check the file before Nix reads it. Those cases run in
+  # a derivation: `nix eval` with a dummy store reads the lockfile, and
+  # each command fails on a file named by the default place, by the
+  # variable YARN_BERRY_PURIFIER_LOCKFILE and by --lockfile, where the flag
+  # wins over the variable and the variable over the default place.
+  conformance-malformed =
+    let
+      reportedProblems = evalCheck "conformance-malformed-problems" (
+        usable (sealed goodLock) yarnLockText
+        && rejected [ ] yarnLockText
+        && rejected (sealed goodLock // { version = 2; }) yarnLockText
+        && rejected (goodLock // { version = 1; }) yarnLockText
+        && rejected (sealed goodLock // { contentHash = yarnLockHash; }) yarnLockText
+        && rejected (sealed (removeAttrs goodLock [ "inputsHash" ])) yarnLockText
+        && rejected (sealed (
+          goodLock // { downloads = [ (removeAttrs download [ "hash" ]) ]; }
+        )) yarnLockText
+      ) "a malformed purifier lockfile evaluated";
+    in
+    pkgs.runCommand "conformance-malformed"
+      {
+        nativeBuildInputs = [
+          pkgs.yarn-berry
+          pkgs.nix
+        ];
+        inherit reportedProblems;
+      }
+      ''
+        ${yarnWithPlugin}
+        export NIX_CONFIG=$'experimental-features = nix-command\nstore = dummy://'
+        cp -r ${./fixtures/app} project
+        chmod -R u+w project
+        cd project
+        printf 'not json' > "$TMPDIR/not-json.lock.json"
+
+        # readLock fails evaluation on a file that is not JSON.
+        if LOCK="$TMPDIR/not-json.lock.json" nix eval --impure --json --expr '
+          (import ${../nix/lib}/read-lock.nix { lib = import ${pkgs.path}/lib; } {
+            src = ${./fixtures/app};
+            lockFile = /. + builtins.getEnv "LOCK";
+          }).problems
+        ' > "$TMPDIR/eval.log" 2>&1; then
+          echo "readLock evaluated a lockfile that is not JSON" >&2
+          exit 1
+        fi
+        if ! grep -qF 'is not valid JSON. Run `yarn-berry-purifier lock`.' "$TMPDIR/eval.log"; then
+          cat "$TMPDIR/eval.log" >&2
+          exit 1
+        fi
+
+        # The command $2... fails, and says the file $1 is not valid JSON.
+        notValid() {
+          expected="$1"
+          shift
+          if "$@" > "$TMPDIR/command.log" 2>&1; then
+            echo "succeeded: $*" >&2
+            exit 1
+          fi
+          if ! grep -qF "$expected is not valid JSON. Run \`yarn-berry-purifier lock\`." "$TMPDIR/command.log"; then
+            echo "no message about $expected from: $*" >&2
+            cat "$TMPDIR/command.log" >&2
+            exit 1
+          fi
+        }
+
+        # The default place holds a valid lockfile, so only a named file
+        # can be the one that fails.
+        printf 'not json' > "$TMPDIR/env.lock.json"
+        printf 'not json' > "$TMPDIR/flag.lock.json"
+        YARN_BERRY_PURIFIER_LOCKFILE="$TMPDIR/env.lock.json" \
+          notValid "$TMPDIR/env.lock.json" yarn purifier prefetch
+        YARN_BERRY_PURIFIER_LOCKFILE="$TMPDIR/env.lock.json" \
+          notValid "$TMPDIR/flag.lock.json" yarn purifier prefetch --lockfile "$TMPDIR/flag.lock.json"
+        YARN_BERRY_PURIFIER_LOCKFILE="$TMPDIR/env.lock.json" \
+          notValid "$TMPDIR/env.lock.json" yarn purifier publish
+
+        # The default place is the file that fails.
+        printf 'not json' > yarn-berry-purifier.lock.json
+        lock="$PWD/yarn-berry-purifier.lock.json"
+        notValid "$lock" yarn purifier prefetch
+        notValid "$lock" yarn purifier publish
+        notValid "$lock" yarn install --immutable --mode=skip-build
+        touch $out
+      '';
 
   # A lock run of fixtures/app reproduces its committed purifier lockfile
   # byte for byte. The lock run needs the network, so the check is a
@@ -451,18 +541,15 @@ in
 
   # After `yarn-berry-purifier prefetch`, the everyday loop of fixtures/app
   # runs in the sandbox, which has no network.
-  conformance-offline = offlineLoop "conformance-offline" "";
+  conformance-offline = offlineLoop "conformance-offline" false;
 
-  # The same loop with the purifier lockfile outside the project, as
-  # `yarn-berry-purifier prefetch --lockfile` leaves it.
-  offline-external = offlineLoop "offline-external" ''
-    mv yarn-berry-purifier.lock.json "$TMPDIR/app.lock.json"
-    printf '%s' "$TMPDIR/app.lock.json" > .yarn/purifier/lockfile
-  '';
+  # The same loop with the purifier lockfile outside the project: the
+  # roots lie beside it, and the project holds none.
+  offline-external = offlineLoop "offline-external" true;
 
-  # A project whose source holds no purifier lockfile builds from one kept
-  # outside it, as a flake that packages a project it does not change
-  # keeps it.
+  # A project whose source holds the build tool's own files, yarn.lock
+  # included, and no purifier lockfile builds from one kept outside it, as
+  # a flake that packages a project it does not change keeps it.
   conformance-external =
     let
       project = buildYarnBerryProject {
@@ -475,6 +562,30 @@ in
       };
     in
     pkgs.runCommand "conformance-external" { nativeBuildInputs = [ project.packages.hello-berry ]; } ''
+      hello-berry | grep -q 'hello-berry: built by the build script (3 is odd: true)'
+      touch $out
+    '';
+
+  # The same with yarn.lock kept outside the source too, passed as
+  # `yarnLock`.
+  external-yarn-lock =
+    let
+      project = buildYarnBerryProject {
+        src = builtins.path {
+          name = "app-without-lockfiles";
+          path = ./fixtures/app;
+          filter =
+            path: _:
+            !(builtins.elem (baseNameOf path) [
+              "yarn.lock"
+              "yarn-berry-purifier.lock.json"
+            ]);
+        };
+        yarnLock = ./fixtures/app/yarn.lock;
+        lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
+      };
+    in
+    pkgs.runCommand "external-yarn-lock" { nativeBuildInputs = [ project.packages.hello-berry ]; } ''
       hello-berry | grep -q 'hello-berry: built by the build script (3 is odd: true)'
       touch $out
     '';

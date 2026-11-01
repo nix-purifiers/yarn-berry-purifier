@@ -15,8 +15,19 @@ const crypto = require("node:crypto");
 
 const plugin = require(path.join(process.env.PLUGIN, "purifier.cjs"));
 const foreign = require(path.join(process.env.PLUGIN, "foreign.cjs"));
-const { urlPath, fetchUrl, registryMirrors, stableUrl, isGithubArchive, contentHash, readLock, writeLock } =
-  plugin.internals;
+const {
+  urlPath,
+  fetchUrl,
+  registryMirrors,
+  stableUrl,
+  isGithubArchive,
+  contentHash,
+  readLock,
+  writeLock,
+  explicitLockfile,
+  lockPathFor,
+  rootsDir,
+} = plugin.internals;
 
 test("contentHash ignores key order and the contentHash field", () => {
   const a = contentHash({ version: 1, b: { y: 1, x: "é\n" }, a: [1] });
@@ -39,6 +50,44 @@ function lockedProject() {
 test("readLock reads what writeLock writes", () => {
   const { root, lockPath } = lockedProject();
   assert.equal(readLock(lockPath, root).version, 1);
+});
+
+test("readLock says a file that is not JSON is not valid JSON, and names the command to run", () => {
+  const { root, lockPath } = lockedProject();
+  fs.writeFileSync(lockPath, "not json");
+  assert.throws(
+    () => readLock(lockPath, root),
+    (error) => error.message.includes(`${lockPath} is not valid JSON. Run \`yarn-berry-purifier lock\`.`),
+  );
+});
+
+test("readLock says a missing file does not exist, and names the command to run", () => {
+  const { root } = lockedProject();
+  const missing = path.join(root, "missing.lock.json");
+  assert.throws(
+    () => readLock(missing, root),
+    (error) => error.message.includes(`${missing} does not exist. Run \`yarn-berry-purifier lock\`.`),
+  );
+});
+
+test("the purifier lockfile comes from the flag, else the variable, else the project root", () => {
+  const saved = process.env.YARN_BERRY_PURIFIER_LOCKFILE;
+  try {
+    delete process.env.YARN_BERRY_PURIFIER_LOCKFILE;
+    assert.equal(lockPathFor("/p", null, "/p/sub"), "/p/yarn-berry-purifier.lock.json");
+    process.env.YARN_BERRY_PURIFIER_LOCKFILE = "../ext/a.lock.json";
+    assert.equal(lockPathFor("/p", null, "/p/sub"), "/p/ext/a.lock.json");
+    assert.equal(lockPathFor("/p", "/x/b.lock.json", "/p/sub"), "/x/b.lock.json");
+    assert.equal(explicitLockfile(null, "/p"), "/ext/a.lock.json");
+  } finally {
+    if (saved === undefined) delete process.env.YARN_BERRY_PURIFIER_LOCKFILE;
+    else process.env.YARN_BERRY_PURIFIER_LOCKFILE = saved;
+  }
+});
+
+test("the roots lie in a directory beside the purifier lockfile", () => {
+  assert.equal(rootsDir("/p/yarn-berry-purifier.lock.json"), "/p/.yarn-berry-purifier");
+  assert.equal(rootsDir("/ext/my-app.lock.json"), "/ext/.yarn-berry-purifier");
 });
 
 test("readLock rejects an edited, stale or malformed lockfile with the command to run", () => {

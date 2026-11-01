@@ -5,7 +5,8 @@
 # downloads from, the same one a sandboxed build of the project uses. The
 # plugin evaluates this file with the absolute paths of the purifier
 # lockfile and of the project's yarn.lock, and keeps the result alive with
-# a garbage-collector root under .yarn/purifier.
+# a garbage-collector root in the .yarn-berry-purifier directory beside the
+# lockfile.
 {
   pkgs,
   # The `purifier` namespace of the shared library.

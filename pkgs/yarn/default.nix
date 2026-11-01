@@ -7,11 +7,12 @@
 # settings of the user's own ~/.yarnrc.yml and loads the plugin. The plugin
 # gives lifecycle scripts the real home directory back.
 #
-# With the plugin loaded, `yarn purifier lock`, `prefetch` and `publish`
-# are the commands that `yarn-berry-purifier` runs, and in a project with a
-# purifier lockfile, Yarn installs offline from the locked downloads, which
-# Nix builds under .yarn/purifier. Yarn delegates to the release that
-# .yarnrc.yml names in yarnPath, as it does without the wrapper.
+# With the plugin loaded, `yarn purifier lock`, `update`, `prefetch` and
+# `publish` are the commands that `yarn-berry-purifier` runs, and in a
+# project with a purifier lockfile, Yarn installs offline from the locked
+# downloads, which Nix builds into the .yarn-berry-purifier directory beside
+# the lockfile. Yarn delegates to the release that .yarnrc.yml names in
+# yarnPath, as it does without the wrapper.
 {
   lib,
   writeShellApplication,

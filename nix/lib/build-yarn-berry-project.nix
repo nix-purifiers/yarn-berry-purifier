@@ -150,13 +150,13 @@ let
       || name == ".git"
       || lib.hasPrefix "result" name
       || lib.hasPrefix ".pnp." name
+      || name == ".yarn-berry-purifier"
       || (
         parent == ".yarn"
         && lib.elem name [
           "unplugged"
           "install-state.gz"
           "build-state.yml"
-          "purifier"
         ]
       )
     );

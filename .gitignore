@@ -5,4 +5,4 @@ node_modules/
 **/.yarn/install-state.gz
 **/.yarn/unplugged/
 **/.yarn/build-state.yml
-**/.yarn/purifier/
+**/.yarn-berry-purifier/

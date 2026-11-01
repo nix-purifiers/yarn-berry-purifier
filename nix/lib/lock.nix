@@ -5,8 +5,7 @@
 #
 #   problems    why the lockfile cannot be used, each naming the command
 #               that fixes it; empty for a usable lockfile. Computing it
-#               throws nothing, except for a file that is not JSON at all,
-#               which builtins.fromJSON rejects with its own error.
+#               throws nothing, except for a file that is not JSON at all.
 #   entries     the download entries of the purifier library, or [] when
 #               there are problems: the downloads, the git repositories
 #               and the Yarn release. A file entry is
@@ -37,7 +36,8 @@
 #               and have none, as { manifestHash, packageLock }
 #
 # `yarn`, `release`, `externals` and `npmLocks` are read only when
-# `problems` is empty.
+# `problems` is empty. A lockfile that is not valid JSON at all fails
+# evaluation with an error context that names the command to run.
 #
 # The lockfile records `version`, the version of its format, and
 # `contentHash`, the SRI SHA-256 of the lockfile without `contentHash` as
@@ -56,7 +56,17 @@ let
   fix = "Run `yarn-berry-purifier lock`.";
 
   exists = builtins.pathExists lockFile;
-  lock = if exists then lib.importJSON lockFile else null;
+
+  # A lockfile that is not valid JSON cannot become a problem, because Nix
+  # cannot catch a parse error. The error context names the fix. The
+  # commands check the file before Nix reads it.
+  lock =
+    if exists then
+      builtins.addErrorContext "yarn-berry-purifier: ${name} is not valid JSON. ${fix}" (
+        lib.importJSON lockFile
+      )
+    else
+      null;
 
   sri =
     text:

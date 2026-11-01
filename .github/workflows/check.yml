@@ -42,3 +42,21 @@ jobs:
           nix run "$GITHUB_WORKSPACE#yarn-berry-purifier" -- prefetch
           sudo unshare -n sudo -u "$USER" env "PATH=$PATH" "HOME=$HOME" \
             sh -c "$RUNNER_TEMP/yarn/bin/yarn install --immutable && $RUNNER_TEMP/yarn/bin/yarn run build"
+      # The same with the purifier lockfile outside the project: prefetch
+      # puts the roots beside it, and YARN_BERRY_PURIFIER_LOCKFILE tells the
+      # yarn wrapper where it lies.
+      - name: conformance-offline-external
+        run: |
+          mkdir "$RUNNER_TEMP/external"
+          cp -r tests/fixtures/app "$RUNNER_TEMP/external/app"
+          chmod -R u+w "$RUNNER_TEMP/external/app"
+          mv "$RUNNER_TEMP/external/app/yarn-berry-purifier.lock.json" "$RUNNER_TEMP/external/app.lock.json"
+          nix build --out-link "$RUNNER_TEMP/yarn" "$GITHUB_WORKSPACE#yarn"
+          cd "$RUNNER_TEMP/external/app"
+          YARN_BERRY_PURIFIER_LOCKFILE="$RUNNER_TEMP/external/app.lock.json" \
+            nix run "$GITHUB_WORKSPACE#yarn-berry-purifier" -- prefetch
+          test -d "$RUNNER_TEMP/external/.yarn-berry-purifier"
+          test ! -e .yarn-berry-purifier
+          sudo unshare -n sudo -u "$USER" env "PATH=$PATH" "HOME=$HOME" \
+            "YARN_BERRY_PURIFIER_LOCKFILE=$RUNNER_TEMP/external/app.lock.json" \
+            sh -c "$RUNNER_TEMP/yarn/bin/yarn install --immutable && $RUNNER_TEMP/yarn/bin/yarn run build"
