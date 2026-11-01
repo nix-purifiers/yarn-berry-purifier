@@ -179,4 +179,12 @@ function manifestHash(manifest) {
   return crypto.createHash("sha256").update(manifest).digest("hex");
 }
 
-module.exports = { foreignDownloads, topLevelFiles, manifestHash, NPM_PLATFORMS };
+module.exports = {
+  foreignDownloads,
+  npmDownloads,
+  classicDownloads,
+  classicMirrorName,
+  topLevelFiles,
+  manifestHash,
+  NPM_PLATFORMS,
+};

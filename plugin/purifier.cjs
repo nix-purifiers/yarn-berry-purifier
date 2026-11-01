@@ -651,3 +651,7 @@ function copyProject(from, to) {
     fs.cpSync(path.join(from, name), path.join(to, name), { recursive: true, filter });
   }
 }
+
+// The helpers the unit tests in tests/unit.test.cjs exercise. Yarn reads
+// only `name` and `factory`.
+module.exports.internals = { urlPath, fetchUrl, registryMirrors, stableUrl, isGithubArchive };

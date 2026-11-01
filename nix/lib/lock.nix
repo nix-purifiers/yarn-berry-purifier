@@ -47,9 +47,36 @@ let
     toHashFormat = "sri";
   };
 
+  name = baseNameOf (toString lockFile);
+
+  # A download entry has a path and the systems that fetch it, and either
+  # the text of a small response or the URL, mirrors and hash of a file.
+  validEntry =
+    d:
+    builtins.isAttrs d
+    && builtins.isString (d.path or null)
+    && builtins.isList (d.systems or null)
+    && (
+      builtins.isString (d.text or null)
+      || (
+        builtins.isString (d.url or null)
+        && builtins.isList (d.mirrors or null)
+        && builtins.isString (d.hash or null)
+      )
+    );
+  invalidEntries = builtins.filter (d: !(validEntry d)) (lock.downloads or [ ]);
+
   checked =
-    if lock.format or null != 1 then
+    if !(builtins.isAttrs lock) then
+      throw "yarn-berry-purifier: ${name} holds no JSON object. Run `yarn purifier lock`."
+    else if lock.format or null != 1 then
       throw "yarn-berry-purifier: ${toString lockFile} has format ${toString (lock.format or null)}; this version reads format 1. Run `yarn purifier lock`."
+    else if
+      !(builtins.isList (lock.downloads or null)) || !(builtins.isString (lock.inputsHash or null))
+    then
+      throw "yarn-berry-purifier: ${name} lacks its `downloads` list or its `inputsHash`. Run `yarn purifier lock`."
+    else if invalidEntries != [ ] then
+      throw "yarn-berry-purifier: ${name} has a malformed download entry: ${builtins.toJSON (builtins.head invalidEntries)}. Run `yarn purifier lock`."
     else if lock.inputsHash != yarnLockHash then
       throw "yarn-berry-purifier: yarn.lock changed since ${baseNameOf (toString lockFile)} was written. Run `yarn purifier lock`."
     else if !(builtins.any (d: lib.elem system d.systems) lock.downloads) && lock.downloads != [ ] then

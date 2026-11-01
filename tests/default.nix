@@ -85,6 +85,31 @@ let
     export YARN_ENABLE_TELEMETRY=0
     export YARN_GLOBAL_FOLDER="$TMPDIR/yarn-global"
   '';
+
+  # Installs fixtures/app from a copy of its served downloads that `change`
+  # alters, and passes when the install fails with `expected` in its
+  # output.
+  failedInstall =
+    name: change: expected:
+    pkgs.runCommand "${name}-check" { nativeBuildInputs = [ pkgs.yarn-berry ]; } ''
+      ${yarnWithPlugin}
+      cp -rL ${app.dependencies} served
+      chmod -R u+w served
+      ${change}
+      export BERRY_PURIFIER_SERVE="$PWD/served"
+      cp -r ${./fixtures/app} project
+      chmod -R u+w project
+      cd project
+      if yarn install --immutable --mode=skip-build > "$TMPDIR/install.log" 2>&1; then
+        echo "the install succeeded" >&2
+        exit 1
+      fi
+      if ! grep -qF ${lib.escapeShellArg expected} "$TMPDIR/install.log"; then
+        cat "$TMPDIR/install.log" >&2
+        exit 1
+      fi
+      touch $out
+    '';
 in
 {
   # The package's command prints what its build script wrote, and its dev
@@ -173,6 +198,70 @@ in
       );
     in
     evalCheck "stale-lock" (!result.success) "a purifier lockfile for another yarn.lock evaluated";
+
+  # Malformed purifier lockfiles fail evaluation: one that holds no
+  # object, one without its inputsHash, and one with a download entry
+  # without a hash.
+  malformed-lock =
+    let
+      fails =
+        lock:
+        !(builtins.tryEval (builtins.deepSeq (readLock "x86_64-linux" lock yarnLockText).downloads true))
+        .success;
+      entry = {
+        path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
+        url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
+        mirrors = [ ];
+        systems = [ "x86_64-linux" ];
+      };
+    in
+    evalCheck "malformed-lock" (
+      fails [ ]
+      && fails {
+        format = 1;
+        yarn = release;
+        downloads = [ ];
+      }
+      && fails {
+        format = 1;
+        inputsHash = yarnLockHash;
+        yarn = release;
+        downloads = [ entry ];
+      }
+    ) "a malformed purifier lockfile evaluated";
+
+  # The hash a download entry records is the hash its fetch expects, so a
+  # build fails when the file at the URL differs from the recorded one.
+  locked-hash =
+    let
+      hash = "sha512-dKlgKLTrnih8yfGKBozBsVcGe0mS1/aKhCGPevK47XUNBMB+L0qk6zFw3YQnOFqH8dWqP9KNw9V+g1oOw4ew2g==";
+      tree = pkgs.callPackage ../nix/lib/dependencies.nix {
+        fetchurl = args: args.hash;
+        downloads = [
+          {
+            path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
+            url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
+            mirrors = [ ];
+            inherit hash;
+          }
+        ];
+      };
+    in
+    evalCheck "locked-hash" (lib.hasInfix "\t${hash}\n" tree.links)
+      "the fetch of a download expects another hash than the locked one";
+
+  # The install fails when a served file differs from the locked one: Yarn
+  # compares each archive with the checksum in yarn.lock.
+  tampered-file = failedInstall "tampered-file" ''
+    set -- $(find served -name '*.tgz' | sort)
+    cp "$2" "$1"
+  '' "checksum";
+
+  # The install fails with the command to run when a request has no served
+  # file, as when the purifier lockfile lacks a download.
+  missing-entry = failedInstall "missing-entry" ''
+    rm "$(find served -name '*.tgz' | sort | head -1)"
+  '' "is not in yarn-berry-purifier.lock.json. Run `yarn purifier lock`";
 
   # The plugin evaluates nix/lib/interactive.nix for a project; the
   # directory it builds is the one the sandboxed build of the project
@@ -382,6 +471,12 @@ in
         grep -qx 'classic resolved and prepared (3 is odd: true)' out.txt
         touch $out
       '';
+
+  # The unit tests of the plugin, run against the plugin as it is built.
+  unit = pkgs.runCommand "unit" { nativeBuildInputs = [ pkgs.nodejs ]; } ''
+    PLUGIN=${plugin} node --test ${./unit.test.cjs}
+    touch $out
+  '';
 
   # A real-world project, pinned: prettier on Yarn 4.18.1, the release its
   # .yarnrc.yml names, built by its own build script. The purifier
