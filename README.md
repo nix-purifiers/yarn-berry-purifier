@@ -345,20 +345,17 @@ builder:
     in
     {
       packages.${system}.default = project.packages.prettier;
-      checks.${system}.tests = project.tests;
     };
 }
 ```
 
 Nix flakes see only the files that git tracks, so add `flake.nix` and
 `prettier.lock.json` to the repository of the packaging flake. Then build
-the `prettier` command, and run the test script of the project in the
-sandbox:
+the `prettier` command:
 
 ```zsh
 cd ../packaging
 nix build
-nix flake check
 ```
 
 The purifier lockfile belongs to one `yarn.lock`. After the flake's
