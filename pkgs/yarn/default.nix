@@ -43,13 +43,16 @@ writeShellApplication {
   text = ''
     # Purifier commands create and manage locks; native commands can run
     # in unconfigured projects without loading the integration.
+    if [ "''${1:-}" != purifier ] && [ "''${BERRY_PURIFIER:-1}" = 0 ]; then
+      exec ${lib.getExe yarnBerry} "$@"
+    fi
     if [ "''${1:-}" != purifier ] && [ "''${BERRY_PURIFIER_RECORD:-}''${BERRY_PURIFIER_SERVE:-}" = "" ]; then
       dir="$PWD"
       lock="''${YARN_BERRY_PURIFIER_LOCKFILE:-}"
       while [ -z "$lock" ]; do
         if [ -e "$dir/yarn-berry-purifier.lock.json" ]; then
           lock="$dir/yarn-berry-purifier.lock.json"
-        elif [ "$dir" = / ]; then
+        elif [ -f "$dir/yarn.lock" ] || [ "$dir" = / ]; then
           break
         else
           dir="$(dirname "$dir")"
