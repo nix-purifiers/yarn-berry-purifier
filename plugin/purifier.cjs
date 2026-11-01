@@ -402,6 +402,20 @@ module.exports = {
           if (!SYSTEMS[system]) throw new Error(`yarn-berry-purifier: unknown system ${system}`);
         }
 
+        // The lock keeps the resolution of yarn.lock as it is. A project
+        // without one gets the yarn.lock that Yarn writes.
+        if (!fs.existsSync(path.join(root, "yarn.lock"))) {
+          this.context.stdout.write("yarn-berry-purifier: no yarn.lock; running yarn install to write one\n");
+          const created = childProcess.spawnSync(process.execPath, [process.argv[1], "install", "--mode=skip-build"], {
+            cwd: root,
+            stdio: ["ignore", "inherit", "inherit"],
+            env: { ...process.env, BERRY_PURIFIER: "0" },
+          });
+          if (created.status !== 0) {
+            throw new Error("yarn-berry-purifier: yarn install failed to write a yarn.lock");
+          }
+        }
+
         // The lock runs work in copies of the project inside it, so they
         // read the .yarnrc.yml files of the directories above the project,
         // which may hold registry or proxy settings.

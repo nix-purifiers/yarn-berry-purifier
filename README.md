@@ -138,7 +138,8 @@ yarn-berry-purifier lock
 ```
 
 `yarn-berry-purifier lock` keeps Yarn's resolution as `yarn.lock` holds
-it. `yarn-berry-purifier update` updates both lockfiles in one run: it runs
+it, and writes a `yarn.lock` only for a project that has none, by running
+`yarn install` without build scripts. `yarn-berry-purifier update` updates both lockfiles in one run: it runs
 `yarn up --recursive` for the packages it names, or for every package when
 it names none, which resolves them again to the newest versions their
 ranges in `package.json` allow and leaves the ranges as they are, and then
@@ -218,6 +219,10 @@ Every error names the command that fixes it.
 - A Yarn command that requests a file the lockfile lacks, such as
   `yarn add`, reports that the file "is not in the purifier lockfile". Run
   the Yarn command with `BERRY_PURIFIER=0`, then `yarn-berry-purifier lock`.
+  A missing download shows up this way, when Yarn requests the file, and
+  not when Nix reads the lock: `yarn.lock` is YAML, which Nix cannot read,
+  so `readLock` reports a missing, stale or damaged purifier lockfile but
+  not a missing entry.
 - A lockfile edited by hand or by a merge "was changed after it was
   written; its contentHash does not match". The lockfile records the
   SHA-256 of its own content. Run `yarn-berry-purifier lock` instead of
@@ -261,6 +266,11 @@ Every error names the command that fixes it.
   manager downloads, and the lockfile records them where npm and Yarn
   Classic read them offline. A repository that names npm or Yarn 1 in
   `packageManager` and has no lockfile gets one resolved by the lock run.
+- The lock run installs the project once for each system. A download that
+  only one platform installs, such as one of esbuild's per-platform
+  binaries, lists only the systems that fetch it in the `systems` field of
+  its entry, and a build fetches the entries for its system and those
+  without `systems`.
 - `patch:`, `portal:`, `link:` and `file:` dependencies and workspaces come
   from the project source. They have to lie inside `src`, because the
   sandbox sees nothing else.
