@@ -23,7 +23,12 @@
 # `git clone <remote>` clone the repository under repositories/.
 {
   lib,
-  pkgs,
+  fetchurl,
+  fetchgit,
+  unzip,
+  zstd,
+  python3,
+  writeText,
   runCommand,
   git,
   # The `purifier` namespace of the shared library.
@@ -41,9 +46,18 @@
   fetchers ? { },
 }:
 let
-  fetchArgs = fetchers // {
-    inherit pkgs;
-  };
+  fetchArgs = {
+    inherit
+      fetchurl
+      fetchgit
+      runCommand
+      unzip
+      zstd
+      python3
+      writeText
+      ;
+  }
+  // fetchers;
 
   dependencies = purifier.tree (
     fetchArgs

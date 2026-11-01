@@ -9,13 +9,15 @@
   pkgs,
   # The project root.
   src,
+  # Yarn's lockfile.
+  yarnLock ? src + "/yarn.lock",
   # The purifier lockfile.
   lockFile ? src + "/yarn-berry-purifier.lock.json",
   # The name of the package to publish.
   package,
 }:
 let
-  project = pkgs.buildYarnBerryProject { inherit src lockFile; };
+  project = pkgs.yarn-berry-purifier.buildYarnBerryProject { inherit src yarnLock lockFile; };
   file = (builtins.replaceStrings [ "@" "/" ] [ "" "__" ] package) + ".tgz";
 in
 pkgs.runCommand "yarn-berry-purifier-publish" { } ''

@@ -14,10 +14,13 @@ In the project, write the purifier lockfile:
 nix run 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
 ```
 
-Commit `yarn-berry-purifier.lock.json` with `yarn.lock`. Then build the
-project from a flake. The overlay `overlays.default` adds the builder
-`buildYarnBerryProject` to the package set, where nixpkgs keeps its own
-builders:
+We recommend committing `yarn-berry-purifier.lock.json` and `yarn.lock` to
+the project's repository, where the builder and the commands look for them
+by default. Then build the project from a flake. The overlay
+`overlays.default` adds one attribute to the package set: the scope
+`yarn-berry-purifier`, made with `lib.makeScope`. The scope holds the
+builder `buildYarnBerryProject`, the command `yarn-berry-purifier`, the
+`yarn` wrapper and the plugin:
 
 ```nix
 {
@@ -31,7 +34,7 @@ builders:
         inherit system;
         overlays = [ yarn-berry-purifier.overlays.default ];
       };
-      project = pkgs.buildYarnBerryProject { src = ./.; };
+      project = pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; };
     in
     {
       packages.${system}.my-app = project.packages.my-app;
@@ -40,13 +43,13 @@ builders:
 }
 ```
 
-A package in an overlay of the flake takes the builder by name, like any
-other builder:
+A package in an overlay of the flake takes the scope by name, like any
+other package:
 
 ```nix
 # package.nix
-{ buildYarnBerryProject }:
-(buildYarnBerryProject { src = ./.; }).packages.my-app
+{ yarn-berry-purifier }:
+(yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app
 ```
 
 ```nix
@@ -56,8 +59,9 @@ overlays = [
 ];
 ```
 
-`buildYarnBerryProject.override` replaces the packages that the builder
-takes from the package set, such as `nodejs`.
+`yarn-berry-purifier.overrideScope` replaces what everything in the scope
+shares, and `buildYarnBerryProject.override` replaces the packages that
+the builder takes by name, such as `nodejs`.
 
 `buildYarnBerryProject` returns these attributes:
 
@@ -90,28 +94,36 @@ such as `fetchurl` for a company mirror or credentials), `lockFile`,
 `yarnLock`, `workspaces` (builds only the listed workspaces),
 `buildScripts`, `node`, `nativeBuildInputs` and `buildInputs`.
 
-A flake that packages a project it does not change keeps the purifier
-lockfile beside itself and passes it as `lockFile`; a `yarnLock` given the
-same way replaces the project's `yarn.lock`. Every command takes the
-purifier lockfile from `--lockfile <path>`, else from the environment
-variable `YARN_BERRY_PURIFIER_LOCKFILE`, else from
-`yarn-berry-purifier.lock.json` next to `yarn.lock`. The flag wins over the
-variable, and the variable over the default place. The plugin accepts the
-variable as the Yarn setting `berryPurifierLockfile`; without the plugin,
-Yarn rejects any `YARN_` variable that it does not know.
+A build can also keep its lockfiles outside the repository, which is an
+option for packaging a project that one does not change. The flake that
+calls the builder keeps the purifier lockfile beside itself and passes it
+as `lockFile`. It can also keep its own copy of `yarn.lock` and pass it as
+`yarnLock`, which the build then uses in place of the copy in `src`. Every
+command takes the purifier lockfile from `--lockfile <path>`, else from the
+environment variable `YARN_BERRY_PURIFIER_LOCKFILE`, else from
+`yarn-berry-purifier.lock.json` next to `yarn.lock`. It takes `yarn.lock`
+from `--tool-lockfile <path>`, else from `YARN_BERRY_PURIFIER_TOOL_LOCKFILE`,
+else from the project. A flag wins over its variable, and a variable over
+the default place. With a tool lockfile, `lock` and `update` write the
+`yarn.lock` there and leave the project's own copy as it is, starting from
+that copy when the tool lockfile does not exist yet. The plugin accepts the
+variables as the Yarn settings `berryPurifierLockfile` and
+`berryPurifierToolLockfile`; without the plugin, Yarn rejects any `YARN_`
+variable that it does not know.
 
 ```zsh
-yarn-berry-purifier lock --lockfile ../packaging/my-app.lock.json
+yarn-berry-purifier lock --lockfile ../packaging/my-app.lock.json --tool-lockfile ../packaging/my-app.yarn.lock
 ```
 
-The dev shell of the flake that calls the builder can set the variable to
-the path it passes as `lockFile`, so that a developer in that shell runs
-the commands, and the `yarn` wrapper, with no flag:
+The dev shell of the flake that calls the builder can set the variables to
+the paths it passes as `lockFile` and `yarnLock`, so that a developer in
+that shell runs the commands, and the `yarn` wrapper, with no flag:
 
 ```nix
 devShells.${system}.default = pkgs.mkShell {
   packages = [ yarn-berry-purifier.packages.${system}.yarn ];
-  YARN_BERRY_PURIFIER_LOCKFILE = toString ./yarn-berry-purifier.lock.json;
+  YARN_BERRY_PURIFIER_LOCKFILE = toString ./my-app.lock.json;
+  YARN_BERRY_PURIFIER_TOOL_LOCKFILE = toString ./my-app.yarn.lock;
 };
 ```
 
@@ -300,9 +312,21 @@ Node.js that runs the build.
 
 ## Examples
 
-### Prettier
+### A project in your own repository
 
-Prettier is a project that a user packages without changing it, so its
+In a clone of the repository that one develops, such as a fork of a
+Yarn Berry project, run the lock command, commit both lockfiles, and
+build with the flake of the Quickstart:
+
+```zsh
+nix run 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
+git add yarn.lock yarn-berry-purifier.lock.json
+nix build
+```
+
+### Prettier, packaged without changing it
+
+Prettier is a project that a user can package without changing it, so its
 purifier lockfile lies beside the flake that builds it, outside the
 project. This example uses release 3.6.2. Clone that release, and write
 the purifier lockfile in a `packaging` directory next to the clone:
@@ -348,7 +372,7 @@ builder:
         inherit system;
         overlays = [ yarn-berry-purifier.overlays.default ];
       };
-      project = pkgs.buildYarnBerryProject {
+      project = pkgs.yarn-berry-purifier.buildYarnBerryProject {
         src = prettier;
         lockFile = ./prettier.lock.json;
       };

@@ -52,6 +52,10 @@ const LOCK_COMMAND = "yarn-berry-purifier lock";
 // has no --lockfile. Yarn reads every YARN_ variable as a setting, so the
 // plugin declares the setting `berryPurifierLockfile` that this name maps to.
 const LOCKFILE_ENV = "YARN_BERRY_PURIFIER_LOCKFILE";
+// The environment variable that names the yarn.lock that the commands read
+// and write when a command has no --tool-lockfile, and the setting
+// `berryPurifierToolLockfile` that maps to it.
+const TOOL_LOCKFILE_ENV = "YARN_BERRY_PURIFIER_TOOL_LOCKFILE";
 // The directory beside a purifier lockfile that holds the garbage-collector
 // roots of `yarn-berry-purifier prefetch` and the scratch directory of the
 // lock run.
@@ -95,8 +99,10 @@ function sha256(buffer) {
   return `sha256-${crypto.createHash("sha256").update(buffer).digest("base64")}`;
 }
 
-function inputsHash(root) {
-  return sha256(fs.readFileSync(path.join(root, "yarn.lock")));
+// The hash of the yarn.lock at path toolLock, which a purifier lockfile
+// records as the one it was written for.
+function inputsHash(toolLock) {
+  return sha256(fs.readFileSync(toolLock));
 }
 
 // A value with the keys of every object sorted, so that JSON.stringify
@@ -119,10 +125,10 @@ function contentHash(lock) {
   return sha256(JSON.stringify(canonical(rest)));
 }
 
-// Reads the purifier lockfile at lockPath for the project at root, and
+// Reads the purifier lockfile at lockPath for the yarn.lock at toolLock, and
 // throws an error that names the command to run when the lockfile is
 // malformed, edited, or written for another yarn.lock.
-function readLock(lockPath, root) {
+function readLock(lockPath, toolLock) {
   const fail = (problem) => {
     throw new Error(`yarn-berry-purifier: ${lockPath} ${problem}. Run \`${LOCK_COMMAND}\`.`);
   };
@@ -143,7 +149,7 @@ function readLock(lockPath, root) {
     fail(`has version ${JSON.stringify(lock.version)}, and this yarn-berry-purifier reads version ${LOCK_VERSION}`);
   }
   if (lock.contentHash !== contentHash(lock)) fail("was changed after it was written; its contentHash does not match");
-  if (lock.inputsHash !== inputsHash(root)) fail("was written for another yarn.lock");
+  if (lock.inputsHash !== inputsHash(toolLock)) fail("was written for another yarn.lock");
   return lock;
 }
 
@@ -161,6 +167,40 @@ function lockPathFor(root, flag, cwd) {
   return explicitLockfile(flag, cwd) || path.join(root, LOCK_FILE);
 }
 
+// The yarn.lock of the project at root that the commands read and write:
+// the one that --tool-lockfile or the environment names, or else the one
+// at the project root.
+function toolLockPathFor(root, flag, cwd) {
+  const named = flag || process.env[TOOL_LOCKFILE_ENV];
+  return named ? path.resolve(cwd, named) : path.join(root, "yarn.lock");
+}
+
+// Starts a yarn.lock that lies outside the project, when it does not exist
+// yet, from the project's own yarn.lock, or from the one that Yarn writes
+// for a project that has none. The project's own yarn.lock stays as it is.
+function startToolLock(root, toolLock) {
+  const treeLock = path.join(root, "yarn.lock");
+  if (toolLock === treeLock || fs.existsSync(toolLock)) return;
+  fs.mkdirSync(path.dirname(toolLock), { recursive: true });
+  if (fs.existsSync(treeLock)) {
+    fs.copyFileSync(treeLock, toolLock);
+    return;
+  }
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "yarn-berry-purifier-"));
+  try {
+    copyProject(root, scratch);
+    const result = childProcess.spawnSync(process.execPath, [process.argv[1], "install", "--mode=skip-build"], {
+      cwd: scratch,
+      stdio: ["ignore", "inherit", "inherit"],
+      env: { ...process.env, BERRY_PURIFIER: "0" },
+    });
+    if (result.status !== 0) throw new Error("yarn-berry-purifier: yarn install failed to write a yarn.lock");
+    fs.copyFileSync(path.join(scratch, "yarn.lock"), toolLock);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 // The directory beside a purifier lockfile that holds the roots of
 // `yarn-berry-purifier prefetch`. Interactive use finds the same roots from
 // the same lockfile path. One purifier lockfile belongs in each directory.
@@ -171,15 +211,15 @@ function rootsDir(lockPath) {
 // Builds the directory of locked files through Nix, unless the one in the
 // roots beside the lockfile was built from the same lockfile, and returns
 // its path. The link keeps it alive as a garbage-collector root.
-function buildDownloads(root, lockPath) {
-  readLock(lockPath, root);
+function buildDownloads(toolLock, lockPath) {
+  readLock(lockPath, toolLock);
   const link = path.join(rootsDir(lockPath), "downloads");
   const stamp = `${link}.stamp`;
   const current = crypto.createHash("sha256").update(fs.readFileSync(lockPath)).digest("hex");
   if (!fs.existsSync(link) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8") !== current) {
     process.stderr.write(`yarn-berry-purifier: building the downloads of ${lockPath}\n`);
     fs.mkdirSync(path.dirname(link), { recursive: true });
-    nixBuild(link, "interactive.nix", { BERRY_PURIFIER_LOCK: lockPath, BERRY_PURIFIER_YARN_LOCK: path.join(root, "yarn.lock") });
+    nixBuild(link, "interactive.nix", { BERRY_PURIFIER_LOCK: lockPath, BERRY_PURIFIER_YARN_LOCK: toolLock });
     fs.writeFileSync(stamp, current);
   }
   return link;
@@ -215,7 +255,7 @@ function interactiveDownloads() {
   // none named, downloads as Yarn does without the plugin.
   const lockPath = lockPathFor(root, null, process.cwd());
   if (!explicitLockfile(null, process.cwd()) && !fs.existsSync(lockPath)) return null;
-  interactiveDir = buildDownloads(root, lockPath);
+  interactiveDir = buildDownloads(toolLockPathFor(root, null, process.cwd()), lockPath);
   return interactiveDir;
 }
 
@@ -316,6 +356,7 @@ function wrapNetworkRequest(executor, extra) {
 async function setupScriptEnvironment(project, env) {
   if (process.env.BERRY_PURIFIER_HOME) env.HOME = process.env.BERRY_PURIFIER_HOME;
   delete env[LOCKFILE_ENV];
+  delete env[TOOL_LOCKFILE_ENV];
 }
 
 // Yarn packs a dependency from a git repository or a GitHub tarball by
@@ -390,6 +431,10 @@ module.exports = {
         description: `Write the purifier lockfile at this path, else at ${LOCKFILE_ENV}, else ${LOCK_FILE} at the project root`,
       });
 
+      toolLockfile = Option.String("--tool-lockfile", {
+        description: `Read the yarn.lock at this path, else at ${TOOL_LOCKFILE_ENV}, else yarn.lock at the project root; with either, the lock starts it from the project's yarn.lock when it does not exist, and the project's copy stays as it is`,
+      });
+
       async execute() {
         // The lock command downloads what it records, also in a project
         // whose current purifier lockfile interactive use would serve from.
@@ -402,9 +447,12 @@ module.exports = {
           if (!SYSTEMS[system]) throw new Error(`yarn-berry-purifier: unknown system ${system}`);
         }
 
-        // The lock keeps the resolution of yarn.lock as it is. A project
+        // The lock keeps the resolution of yarn.lock as it is. A yarn.lock
+        // outside the project starts from the project's own, and a project
         // without one gets the yarn.lock that Yarn writes.
-        if (!fs.existsSync(path.join(root, "yarn.lock"))) {
+        const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
+        startToolLock(root, toolLock);
+        if (toolLock === path.join(root, "yarn.lock") && !fs.existsSync(toolLock)) {
           this.context.stdout.write("yarn-berry-purifier: no yarn.lock; running yarn install to write one\n");
           const created = childProcess.spawnSync(process.execPath, [process.argv[1], "install", "--mode=skip-build"], {
             cwd: root,
@@ -436,6 +484,8 @@ module.exports = {
             this.context.stdout.write(`yarn-berry-purifier: locking for ${system}\n`);
             const copy = path.join(work, system);
             copyProject(root, copy);
+            // The copy installs from the yarn.lock that the lock reads.
+            fs.copyFileSync(toolLock, path.join(copy, "yarn.lock"));
             const platform = SYSTEMS[system];
             // The copy installs for one platform.
             await Configuration.updateConfiguration(copy, {
@@ -525,7 +575,7 @@ module.exports = {
 
           const yarn = await lockedYarn(configuration, root);
           const content = {
-            inputsHash: inputsHash(root),
+            inputsHash: inputsHash(toolLock),
             yarn,
             // A download's mirrors follow from its URL by the rule of
             // registryMirrors, which nix/lib/lock.nix applies, so the
@@ -572,30 +622,57 @@ module.exports = {
         description: `Write the purifier lockfile at this path, else at ${LOCKFILE_ENV}, else ${LOCK_FILE} at the project root`,
       });
 
+      toolLockfile = Option.String("--tool-lockfile", {
+        description: `Update the yarn.lock at this path, else at ${TOOL_LOCKFILE_ENV}, else yarn.lock at the project root; the project's copy stays as it is when the path names another file`,
+      });
+
       systems = Option.Array("--system", {
         description: "A Nix system to lock for; the default is every system yarn-berry-purifier knows",
       });
 
       async execute() {
-        const run = (args) => {
+        const run = (args, cwd) => {
           const result = childProcess.spawnSync(process.execPath, [process.argv[1], ...args], {
-            cwd: this.context.cwd,
+            cwd,
             stdio: ["ignore", "inherit", "inherit"],
             env: { ...process.env, BERRY_PURIFIER: "0" },
           });
           if (result.status !== 0) throw new Error(`yarn-berry-purifier: yarn ${args.join(" ")} failed`);
         };
         const patterns = this.packages.length > 0 ? this.packages : ["*"];
-        run(["up", "--recursive", ...patterns]);
+        const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
+        const { project } = await Project.find(configuration, this.context.cwd);
+        const root = path.resolve(project.cwd);
+        const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
+        if (toolLock === path.join(root, "yarn.lock")) {
+          run(["up", "--recursive", ...patterns], this.context.cwd);
+        } else {
+          // A yarn.lock outside the project is updated in a copy of the
+          // project, so the project's own yarn.lock stays as it is.
+          startToolLock(root, toolLock);
+          const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "yarn-berry-purifier-update-"));
+          try {
+            copyProject(root, scratch);
+            fs.copyFileSync(toolLock, path.join(scratch, "yarn.lock"));
+            run(["up", "--recursive", ...patterns], scratch);
+            fs.copyFileSync(path.join(scratch, "yarn.lock"), toolLock);
+          } finally {
+            fs.rmSync(scratch, { recursive: true, force: true });
+          }
+        }
         // The relock writes the lockfile that the flag or the variable
-        // names, or else the default one.
+        // names, or else the default one, from the updated yarn.lock.
         const named = explicitLockfile(this.lockfile, this.context.cwd);
-        run([
-          "purifier",
-          "lock",
-          ...(named ? ["--lockfile", named] : []),
-          ...(this.systems || []).flatMap((system) => ["--system", system]),
-        ]);
+        run(
+          [
+            "purifier",
+            "lock",
+            ...(named ? ["--lockfile", named] : []),
+            ...(toolLock !== path.join(root, "yarn.lock") ? ["--tool-lockfile", toolLock] : []),
+            ...(this.systems || []).flatMap((system) => ["--system", system]),
+          ],
+          this.context.cwd,
+        );
         return 0;
       }
     }
@@ -616,21 +693,26 @@ module.exports = {
         description: `Read the purifier lockfile at this path, else at ${LOCKFILE_ENV}, else ${LOCK_FILE} at the project root`,
       });
 
+      toolLockfile = Option.String("--tool-lockfile", {
+        description: `Read the yarn.lock at this path, else at ${TOOL_LOCKFILE_ENV}, else yarn.lock at the project root`,
+      });
+
       async execute() {
         const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
         const { project } = await Project.find(configuration, this.context.cwd);
         const root = path.resolve(project.cwd);
         const lockPath = lockPathFor(root, this.lockfile, this.context.cwd);
+        const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
         // readLock checks the file before Nix reads it: that it exists, is
         // valid JSON, and is current.
-        const lock = readLock(lockPath, root);
+        const lock = readLock(lockPath, toolLock);
         const dir = rootsDir(lockPath);
         fs.mkdirSync(dir, { recursive: true });
-        buildDownloads(root, lockPath);
+        buildDownloads(toolLock, lockPath);
         if (lock.yarn && lock.yarn.url) {
           nixBuild(path.join(dir, "yarn-release"), "release.nix", {
             BERRY_PURIFIER_LOCK: lockPath,
-            BERRY_PURIFIER_YARN_LOCK: path.join(root, "yarn.lock"),
+            BERRY_PURIFIER_YARN_LOCK: toolLock,
           });
         }
         for (const [name, file] of [
@@ -662,6 +744,9 @@ module.exports = {
       lockfile = Option.String("--lockfile", {
         description: `Build with the purifier lockfile at this path, else at ${LOCKFILE_ENV}, else ${LOCK_FILE} at the project root`,
       });
+      toolLockfile = Option.String("--tool-lockfile", {
+        description: `Build with the yarn.lock at this path, else at ${TOOL_LOCKFILE_ENV}, else yarn.lock at the project root`,
+      });
 
       async execute() {
         const { npmConfigUtils, npmHttpUtils, npmPublishUtils } = require("@yarnpkg/plugin-npm");
@@ -678,8 +763,9 @@ module.exports = {
           this.context.stdout.write(`yarn-berry-purifier: building the tarball of ${name}\n`);
           const root = path.resolve(project.cwd);
           const lockPath = lockPathFor(root, this.lockfile, this.context.cwd);
+          const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
           // The file is checked before Nix reads it.
-          readLock(lockPath, root);
+          readLock(lockPath, toolLock);
           const out = childProcess
             .execFileSync(
               "nix",
@@ -689,7 +775,7 @@ module.exports = {
                 "--no-link",
                 "--print-out-paths",
                 "--expr",
-                `import ${NIX_LIB}/publish.nix { pkgs = ${PKGS_WITH_OVERLAY}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
+                `import ${NIX_LIB}/publish.nix { pkgs = ${PKGS_WITH_OVERLAY}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; yarnLock = /. + builtins.getEnv "BERRY_PURIFIER_YARN_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
               ],
               {
                 stdio: ["ignore", "pipe", "inherit"],
@@ -697,6 +783,7 @@ module.exports = {
                   ...process.env,
                   BERRY_PURIFIER_SRC: root,
                   BERRY_PURIFIER_LOCK: lockPath,
+                  BERRY_PURIFIER_YARN_LOCK: toolLock,
                   BERRY_PURIFIER_PACKAGE: name,
                 },
               },
@@ -821,6 +908,12 @@ module.exports = {
       configuration: {
         berryPurifierLockfile: {
           description: `The purifier lockfile that the commands of yarn-berry-purifier use instead of ${LOCK_FILE} at the project root`,
+          type: SettingsType.STRING,
+          default: null,
+          isNullable: true,
+        },
+        berryPurifierToolLockfile: {
+          description: `The yarn.lock that the commands of yarn-berry-purifier use instead of yarn.lock at the project root`,
           type: SettingsType.STRING,
           default: null,
           isNullable: true,

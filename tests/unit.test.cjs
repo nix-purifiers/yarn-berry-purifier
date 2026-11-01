@@ -49,14 +49,14 @@ function lockedProject() {
 
 test("readLock reads what writeLock writes", () => {
   const { root, lockPath } = lockedProject();
-  assert.equal(readLock(lockPath, root).version, 1);
+  assert.equal(readLock(lockPath, path.join(root, "yarn.lock")).version, 1);
 });
 
 test("readLock says a file that is not JSON is not valid JSON, and names the command to run", () => {
   const { root, lockPath } = lockedProject();
   fs.writeFileSync(lockPath, "not json");
   assert.throws(
-    () => readLock(lockPath, root),
+    () => readLock(lockPath, path.join(root, "yarn.lock")),
     (error) => error.message.includes(`${lockPath} is not valid JSON. Run \`yarn-berry-purifier lock\`.`),
   );
 });
@@ -65,7 +65,7 @@ test("readLock says a missing file does not exist, and names the command to run"
   const { root } = lockedProject();
   const missing = path.join(root, "missing.lock.json");
   assert.throws(
-    () => readLock(missing, root),
+    () => readLock(missing, path.join(root, "yarn.lock")),
     (error) => error.message.includes(`${missing} does not exist. Run \`yarn-berry-purifier lock\`.`),
   );
 });
@@ -95,14 +95,14 @@ test("readLock rejects an edited, stale or malformed lockfile with the command t
   const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
   const fails = (text) => {
     fs.writeFileSync(lockPath, text);
-    assert.throws(() => readLock(lockPath, root), /Run `yarn-berry-purifier lock`/);
+    assert.throws(() => readLock(lockPath, path.join(root, "yarn.lock")), /Run `yarn-berry-purifier lock`/);
   };
   fails(JSON.stringify({ ...lock, downloads: [{ path: "x" }] }));
   fails(JSON.stringify({ ...lock, version: 2 }));
   fails("{");
   fs.writeFileSync(lockPath, JSON.stringify(lock));
   fs.writeFileSync(path.join(root, "yarn.lock"), "# another yarn.lock\n");
-  assert.throws(() => readLock(lockPath, root), /another yarn.lock/);
+  assert.throws(() => readLock(lockPath, path.join(root, "yarn.lock")), /another yarn.lock/);
 });
 
 const SYSTEMS = ["x86_64-linux", "aarch64-linux", "x86_64-darwin", "aarch64-darwin"];

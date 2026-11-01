@@ -23,7 +23,7 @@ let
 
   # Every fixture builds the way a consumer's package does: through the
   # builder that the overlay adds to the package set.
-  inherit (withOverlay) buildYarnBerryProject;
+  inherit (withOverlay.yarn-berry-purifier) buildYarnBerryProject;
 
   # One package with a build script, a test script, a command, a
   # dependency and a dev dependency, installed with Plug'n'Play.
@@ -475,6 +475,19 @@ in
           diff ${./fixtures/app/yarn-berry-purifier.lock.json} yarn-berry-purifier.lock.json >&2
           exit 1
         fi
+        cd ..
+        # With both lockfiles outside the project, lock starts the tool
+        # lockfile from the project's own yarn.lock, writes both outside,
+        # and leaves the project as it is.
+        cp -r ${./fixtures/app} external
+        chmod -R u+w external
+        rm external/yarn-berry-purifier.lock.json
+        cd external
+        yarn purifier lock --lockfile ../out/lock.json --tool-lockfile ../out/yarn.lock
+        cmp ../out/lock.json ${./fixtures/app/yarn-berry-purifier.lock.json}
+        cmp ../out/yarn.lock ${./fixtures/app/yarn.lock}
+        cmp yarn.lock ${./fixtures/app/yarn.lock}
+        test ! -e yarn-berry-purifier.lock.json
         touch $out
       '';
 
@@ -560,11 +573,25 @@ in
         };
         lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
       };
+      # A fixture whose own yarn.lock is stale builds with the yarn.lock
+      # that the caller passes in its place.
+      replaced = buildYarnBerryProject {
+        src = ./fixtures/external-stale;
+        yarnLock = ./fixtures/app/yarn.lock;
+        lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
+      };
     in
-    pkgs.runCommand "conformance-external" { nativeBuildInputs = [ project.packages.hello-berry ]; } ''
-      hello-berry | grep -q 'hello-berry: built by the build script (3 is odd: true)'
-      touch $out
-    '';
+    pkgs.runCommand "conformance-external"
+      {
+        nativeBuildInputs = [
+          project.packages.hello-berry
+          replaced.packages.hello-berry
+        ];
+      }
+      ''
+        hello-berry | grep -q 'hello-berry: built by the build script (3 is odd: true)'
+        touch $out
+      '';
 
   # The same with yarn.lock kept outside the source too, passed as
   # `yarnLock`.

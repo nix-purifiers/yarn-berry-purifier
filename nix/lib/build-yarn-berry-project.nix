@@ -8,15 +8,14 @@
 # own packages (the root and its workspaces).
 #
 # The file is a package for callPackage: the first argument set is what it
-# takes from the package set, and the result is the builder. The
-# yarn-berry-purifier overlay (`overlays.default`) adds it to the package
-# set as `buildYarnBerryProject`, so a package written for callPackage
-# takes it like any other dependency:
+# takes by name from the scope `pkgs.yarn-berry-purifier`, which the flake's
+# `overlays.default` adds to the package set, and the result is the
+# builder. A package written for callPackage takes the scope by name:
 #
-#   { buildYarnBerryProject }:
-#   (buildYarnBerryProject { src = ./.; }).packages.my-app
+#   { yarn-berry-purifier }:
+#   (yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app
 #
-# and `buildYarnBerryProject.override` replaces what it takes from the set.
+# and `buildYarnBerryProject.override` replaces what the builder takes.
 # The builder returns
 #
 #   packages.<name>   package <name> of the project, installed with its
@@ -35,17 +34,21 @@
   lib,
   stdenv,
   callPackage,
-  # The package set, which the purifier library's fetchEntry and tree take.
-  pkgs,
+  # The packages that the purifier library's fetchEntry and tree take.
+  runCommand,
+  fetchurl,
+  fetchgit,
+  unzip,
+  zstd,
+  writeText,
   nodejs,
   python3,
   node-gyp,
   git,
   autoPatchelfHook,
   runtimeShell,
-  # The yarn-berry-purifier package scope, whose `plugin` the build loads
-  # into Yarn.
-  yarn-berry-purifier,
+  # The Yarn plugin of this scope, which the build loads into Yarn.
+  plugin,
   # The `purifier` namespace of the shared library.
   purifier,
 }:
@@ -116,9 +119,18 @@ let
     else
       forSystem;
 
-  fetchArgs = fetchers // {
-    inherit pkgs;
-  };
+  fetchArgs = {
+    inherit
+      fetchurl
+      fetchgit
+      runCommand
+      unzip
+      zstd
+      python3
+      writeText
+      ;
+  }
+  // fetchers;
 
   allPackages = import ./workspaces.nix { inherit lib src; };
   ownPackageSet =
@@ -182,8 +194,6 @@ let
     inherit purifier fetchers entries;
     inherit (lock) npmLocks externals;
   };
-
-  inherit (yarn-berry-purifier) plugin;
 
   steps = import ./yarn-steps.nix {
     inherit

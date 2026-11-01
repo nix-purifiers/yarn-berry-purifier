@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-{ ... }:
+{ closure-lib, ... }:
 {
   config,
   inputs,
@@ -8,22 +8,24 @@
 }:
 {
 
-  imports = [ inputs.flake-parts.flakeModules.partitions ];
+  imports = [
+    inputs.flake-parts.flakeModules.partitions
+    closure-lib.caisson.modules.flake."purifier/purifier-packages"
+  ];
 
   debug = false;
   caisson = {
     libOverlays.exported = libOverlays: {
       inherit (libOverlays) default;
     };
-
-    # The packages are the `default` entry of this flake's package overlay
-    # registry (pkg-overlays/): the package set applies it by default, and
-    # the flake exports it as `pkgOverlays` and as the plain
-    # `overlays.default`.
-    nixpkgs = {
-      packages.export.enabled = true;
-    };
   };
+
+  # The scope `pkgs.yarn-berry-purifier` is the `default` entry of this
+  # flake's package overlay registry (pkg-overlays/): the package set
+  # applies it by default, and the flake exports it as `pkgOverlays` and as
+  # the plain `overlays.default`. The flake publishes the derivations of the
+  # scope as its packages.
+  purifier.scope = "yarn-berry-purifier";
 
   # `nix run github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier
   # -- lock` writes the purifier lockfile, and `nix run
