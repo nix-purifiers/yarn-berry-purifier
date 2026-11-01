@@ -113,7 +113,13 @@ let
 
   dependencies = callPackage ./served.nix (
     {
-      inherit (lock) downloads externals repositories;
+      inherit (lock)
+        downloads
+        texts
+        npmLocks
+        externals
+        repositories
+        ;
     }
     // lib.optionalAttrs (args.fetchurl or null != null) { inherit (args) fetchurl; }
     // lib.optionalAttrs (args.fetchgit or null != null) { inherit (args) fetchgit; }
@@ -129,6 +135,7 @@ let
       dependencies
       ;
     fetchurl = pkgs.fetchurl;
+    inherit (pkgs) runtimeShell;
     yarnRelease = lock.yarn;
   };
 

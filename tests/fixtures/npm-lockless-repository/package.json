@@ -1,0 +1,8 @@
+{
+  "name": "npm-lockless-dependency",
+  "version": "1.0.0",
+  "main": "built.js",
+  "packageManager": "npm@10.9.2",
+  "scripts": { "prepare": "node prepare.js" },
+  "devDependencies": { "is-odd": "^3.0.1" }
+}

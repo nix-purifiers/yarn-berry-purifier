@@ -50,10 +50,22 @@ let
 
   # The repository of the git dependency in fixtures/git, and a stand-in for
   # nix-prefetch-git that prints a hash without fetching.
-  gitRepository = pkgs.callPackage ./git-repository.nix { };
+  makeRepository = pkgs.callPackage ./git-repository.nix { };
+  gitRepository = makeRepository ./fixtures/git-repository;
+  npmRepository = makeRepository ./fixtures/npm-repository;
+  classicRepository = makeRepository ./fixtures/classic-repository;
   fakePrefetchGit = pkgs.writeShellScript "nix-prefetch-git" ''
     echo '{ "hash": "${lib.fakeHash}" }'
   '';
+  # A repository as fetchgit returns it without `leaveDotGit`: its files,
+  # without the .git directory.
+  checkoutOf =
+    repository:
+    pkgs.runCommand "checkout" { } ''
+      cp -r ${repository} "$out"
+      chmod -R u+w "$out"
+      rm -rf "$out/.git"
+    '';
 
   # A lockfile check passes when `assertion` holds; it fails with
   # `message` otherwise.
@@ -69,7 +81,7 @@ let
   yarnWithPlugin = ''
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME"
-    printf 'plugins:\n  - path: %s\n    spec: "@nix-purifiers/plugin-yarn-berry-purifier"\n' ${plugin} > "$HOME/.yarnrc.yml"
+    printf 'plugins:\n  - path: %s\n    spec: "@nix-purifiers/plugin-yarn-berry-purifier"\n' ${plugin}/purifier.cjs > "$HOME/.yarnrc.yml"
     export YARN_ENABLE_TELEMETRY=0
     export YARN_GLOBAL_FOLDER="$TMPDIR/yarn-global"
   '';
@@ -301,8 +313,8 @@ in
         export BERRY_PURIFIER_PREFETCH_GIT=${fakePrefetchGit}
         yarn install --mode=skip-build
         yarn purifier lock --system x86_64-linux
-        jq -c .repositories yarn-berry-purifier.lock.json
-        jq -e '.repositories == [{
+        jq -e '.repositories | length == 1' yarn-berry-purifier.lock.json
+        jq -e '.repositories[0] | del(.git.commitObject) == {
           path: "git/55e425bf63e80624db0138ef7ff3ff32fe4c7ab5",
           git: {
             url: "https://git.example.invalid/git-dependency.git",
@@ -312,7 +324,10 @@ in
           },
           hash: "${lib.fakeHash}",
           remote: "https://git.example.invalid/git-dependency.git"
-        }]' yarn-berry-purifier.lock.json
+        }' yarn-berry-purifier.lock.json
+        # The commit object is the locked commit's own.
+        jq -r '.repositories[0].git.commitObject' yarn-berry-purifier.lock.json | base64 -d \
+          | git hash-object -t commit --stdin | grep -qx 55e425bf63e80624db0138ef7ff3ff32fe4c7ab5
         mkdir -p "$out"
         cp yarn.lock yarn-berry-purifier.lock.json "$out"
       '';
@@ -326,12 +341,45 @@ in
     let
       project = buildYarnBerryProject {
         src = ./fixtures/git;
-        fetchgit = _: gitRepository;
+        fetchgit = _: checkoutOf gitRepository;
       };
     in
     pkgs.runCommand "git-build-check" { nativeBuildInputs = [ project.packages.uses-git-dependency ]; }
       ''
         uses-git-dependency | grep -qx 'cloned and packed'
+        touch $out
+      '';
+
+  # Four git dependencies whose repositories Yarn packs with another
+  # package manager, each with a prepare script that runs a devDependency:
+  # one with a package-lock.json, which npm installs offline from its
+  # cache; one with a Yarn Classic yarn.lock, which Yarn Classic installs
+  # from its offline mirror after `yarn set version classic`; and one of
+  # each that names its package manager in packageManager and has no
+  # lockfile, which gets the lockfile the lock run resolved for it. The
+  # lockfiles come from a lock run against the fixture repositories, and
+  # `fetchgit` returns those repositories in place of clones.
+  foreign =
+    let
+      repositories = {
+        npm-dependency = npmRepository;
+        classic-dependency = classicRepository;
+        npm-lockless-dependency = makeRepository ./fixtures/npm-lockless-repository;
+        classic-lockless-dependency = makeRepository ./fixtures/classic-lockless-repository;
+      };
+      project = buildYarnBerryProject {
+        src = ./fixtures/foreign;
+        fetchgit = args: checkoutOf repositories.${lib.removeSuffix ".git" (baseNameOf args.url)};
+      };
+    in
+    pkgs.runCommand "foreign-check"
+      { nativeBuildInputs = [ project.packages.uses-foreign-dependencies ]; }
+      ''
+        uses-foreign-dependencies > out.txt
+        grep -qx 'npm prepared (3 is odd: true)' out.txt
+        grep -qx 'classic prepared (3 is odd: true)' out.txt
+        grep -qx 'npm resolved and prepared (3 is odd: true)' out.txt
+        grep -qx 'classic resolved and prepared (3 is odd: true)' out.txt
         touch $out
       '';
 

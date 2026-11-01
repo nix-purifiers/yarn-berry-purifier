@@ -1,0 +1,11 @@
+{
+  "name": "uses-foreign-dependencies",
+  "version": "1.0.0",
+  "bin": "cli.js",
+  "dependencies": {
+    "classic-dependency": "git+https://git.example.invalid/classic-dependency.git#62db8b87e7e0dd57c8e2f01ccb226470e4a8eb20",
+    "classic-lockless-dependency": "git+https://git.example.invalid/classic-lockless-dependency.git#217d62eabd23685a4e8b15685e53b5659611bfd1",
+    "npm-dependency": "git+https://git.example.invalid/npm-dependency.git#8b938fbbbbf11f649e6d0b698281934704c56a69",
+    "npm-lockless-dependency": "git+https://git.example.invalid/npm-lockless-dependency.git#6a79737227132cc161eb123439f55d6d55f1a16a"
+  }
+}

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
 #
 # A git repository for the checks of git dependencies: the files of
-# fixtures/git-repository in one commit, with a fixed author, committer and
-# date, so its commit hash is the same in every build. The result is a
-# checkout with its .git directory, as fetchgit with `leaveDotGit` returns
-# one.
+# directory `src` in one commit, with a fixed author, committer and date, so
+# its commit hash is the same in every build. The result is a checkout with
+# its .git directory, as fetchgit with `leaveDotGit` returns one.
 { runCommand, git }:
+src:
 runCommand "git-repository" { nativeBuildInputs = [ git ]; } ''
-  cp -r ${./fixtures/git-repository} "$out"
+  cp -r ${src} "$out"
   chmod -R u+w "$out"
   cd "$out"
   export GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid

@@ -7,10 +7,16 @@
 #               { path, url, mirrors, hash }: `path` is where the plugin
 #               looks the URL up, `mirrors` lists other URLs that serve the
 #               same file, and `hash` is its SRI hash
+#   texts       the small JSON documents the install reads, such as the list
+#               of Yarn releases, as { path, text }; they change as releases
+#               appear, so the purifier lockfile holds their text
 #   externals   the yarn.lock files that the lock run resolved for git and
 #               GitHub dependencies whose repositories have none, as
 #               { manifestHash, yarnLock }: `manifestHash` is the SHA-256 of the
 #               repository's package.json, by which the plugin finds it
+#   npmLocks    the package-lock.json files that the lock run resolved for
+#               git and GitHub dependencies that name npm in packageManager
+#               and have none, as { manifestHash, packageLock }
 #   repositories the git repositories Yarn clones, as
 #               { path, git = { url, rev, submodules, leaveDotGit }, hash,
 #               remote }: a checkout of commit `rev` with its .git
@@ -51,11 +57,16 @@ let
     else
       lock;
 in
-{
-  downloads = map (d: removeAttrs d [ "systems" ]) (
+let
+  forSystem = map (d: removeAttrs d [ "systems" ]) (
     builtins.filter (d: lib.elem system d.systems) checked.downloads
   );
+in
+{
+  downloads = builtins.filter (d: !(d ? text)) forSystem;
+  texts = builtins.filter (d: d ? text) forSystem;
   inherit (checked) yarn;
   externals = checked.externals or [ ];
+  npmLocks = checked.npmLocks or [ ];
   repositories = checked.repositories or [ ];
 }

@@ -1,0 +1,8 @@
+{
+  "name": "classic-lockless-dependency",
+  "version": "1.0.0",
+  "main": "built.js",
+  "packageManager": "yarn@1.22.22",
+  "scripts": { "prepare": "node prepare.js" },
+  "devDependencies": { "is-odd": "^3.0.1" }
+}

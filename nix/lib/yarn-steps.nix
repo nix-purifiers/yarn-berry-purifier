@@ -4,6 +4,7 @@
 {
   lib,
   fetchurl,
+  runtimeShell,
   # The Node.js that runs Yarn.
   node,
   # The plugin, which answers Yarn's downloads from `dependencies`.
@@ -31,10 +32,44 @@ in
     mkdir -p "$HOME"
     cat > "$HOME/.yarnrc.yml" << 'EOF'
     plugins:
-      - path: ${plugin}
+      - path: ${plugin}/purifier.cjs
         spec: "@nix-purifiers/plugin-yarn-berry-purifier"
     EOF
     export BERRY_PURIFIER_SERVE=${dependencies}
+    # When Yarn packs a git dependency with npm or Yarn Classic, npm reads
+    # the served tarballs from its cache by integrity, offline, and Yarn
+    # Classic reads them from its offline mirror. Yarn passes these settings
+    # through to both; it would reject unknown YARN_ settings.
+    export npm_config_cache="$TMPDIR/npm-cache"
+    mkdir -p "$npm_config_cache"
+    if [ -d ${dependencies}/npm-cache ]; then
+      cp -rs --no-preserve=mode ${dependencies}/npm-cache/. "$npm_config_cache"
+    fi
+    export npm_config_offline=true
+    export npm_config_audit=false
+    export npm_config_fund=false
+    export npm_config_update_notifier=false
+    export npm_config_yarn_offline_mirror=${dependencies}/yarn-mirror
+    # Yarn packs git dependencies in parallel, and Yarn Classic installs
+    # into a shared cache that only one Yarn Classic may write at a time.
+    echo "--mutex \"file:$TMPDIR/yarn-classic.mutex\"" > "$HOME/.yarnrc"
+    # A git dependency that names npm in packageManager and has no lockfile
+    # gets the package-lock.json the lock run resolved for it, from this
+    # `npm` in front of npm on the PATH.
+    mkdir -p "$TMPDIR/purifier-bin"
+    cat > "$TMPDIR/purifier-bin/npm" << 'EOF'
+    #!${runtimeShell}
+    if [ -f package.json ] && [ ! -f package-lock.json ]; then
+      lock="${dependencies}/npm-locks/$(sha256sum package.json | cut -d' ' -f1).json"
+      if [ -f "$lock" ]; then
+        cp "$lock" package-lock.json
+        chmod u+w package-lock.json
+      fi
+    fi
+    exec ${node}/bin/npm "$@"
+    EOF
+    chmod +x "$TMPDIR/purifier-bin/npm"
+    export PATH="$TMPDIR/purifier-bin:$PATH"
     # `git clone` of a locked repository clones the copy in the served
     # directory.
     export GIT_CONFIG_COUNT=${toString (builtins.length dependencies.gitConfig)}

@@ -14,12 +14,14 @@
         "url": "https://git.example.invalid/git-dependency.git",
         "rev": "55e425bf63e80624db0138ef7ff3ff32fe4c7ab5",
         "submodules": false,
-        "leaveDotGit": true
+        "leaveDotGit": true,
+        "commitObject": "dHJlZSBjOTQ3NjE3Yzg4NjUzMTVlNTA1OGQxZWYxOGEwODExNjVhNDdkNDk0CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK"
       },
       "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "remote": "https://git.example.invalid/git-dependency.git"
     }
   ],
+  "npmLocks": [],
   "externals": [
     {
       "manifestHash": "8ac0de38fa659ed243c32c83682c1d3dadc5b1f031138916d893898c8fe5f567",

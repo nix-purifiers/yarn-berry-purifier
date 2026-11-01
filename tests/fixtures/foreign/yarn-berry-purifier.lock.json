@@ -1,0 +1,153 @@
+{
+  "format": 1,
+  "inputsHash": "sha256-vLq2/U02lFeQu4+oRVnF9oI8l+URA0o47nlX3ALUICs=",
+  "yarn": {
+    "version": "4.18.1",
+    "url": "https://repo.yarnpkg.com/4.18.1/packages/yarnpkg-cli/bin/yarn.js",
+    "hash": "sha512-suHnUk9lTydJ0ytOvLRiJHPLW8vEhd8gB+EqFU5QFipNeVUmdovF9bj4Fxe/153rJHKBPYb7WuLrVR+pyHKwjw=="
+  },
+  "downloads": [
+    {
+      "path": "https/classic.yarnpkg.com/latest.js",
+      "url": "https://github.com/yarnpkg/yarn/releases/download/v1.22.22/yarn-1.22.22.js",
+      "mirrors": [
+        "https://classic.yarnpkg.com/latest.js"
+      ],
+      "hash": "sha512-iNJ+OAvKncSbPkcaA5bckUT7N3S4uwtvz19FPt4Z/CBMdXWo1L9X0zsUdQyNhcUAWaTpO1AZHBLq/63NXh4ATA==",
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    },
+    {
+      "path": "https/repo.yarnpkg.com/tags",
+      "text": "{\n  \"latest\": {\n    \"stable\": \"4.18.1\",\n    \"canary\": \"4.18.1\"\n  },\n  \"aliases\": {\n    \"latest\": \"4.18.1\",\n    \"stable\": \"4.18.1\",\n    \"canary\": \"4.18.1\"\n  },\n  \"tags\": [\n    \"4.18.1\",\n    \"4.18.0\",\n    \"4.17.1\",\n    \"4.17.0\",\n    \"4.16.0\",\n    \"4.15.0\",\n    \"4.14.1\",\n    \"4.14.0\",\n    \"4.13.0\",\n    \"4.12.0\",\n    \"4.11.0\",\n    \"4.10.3\",\n    \"4.10.2\",\n    \"4.10.1\",\n    \"4.10.0\",\n    \"4.9.4\",\n    \"4.9.3\",\n    \"4.9.2\",\n    \"4.9.1\",\n    \"4.9.0\",\n    \"4.8.1\",\n    \"4.8.0\",\n    \"4.7.0\",\n    \"4.6.0\",\n    \"4.5.3\",\n    \"4.5.2\",\n    \"4.5.1\",\n    \"4.5.0\",\n    \"4.4.1\",\n    \"4.4.0\",\n    \"4.3.1\",\n    \"4.3.0\",\n    \"4.2.2\",\n    \"4.2.1\",\n    \"4.2.0\",\n    \"4.1.1\",\n    \"4.1.0\",\n    \"4.0.2\",\n    \"4.0.1\",\n    \"4.0.0\",\n    \"4.0.0-rc.53\",\n    \"4.0.0-rc.52\",\n    \"4.0.0-rc.51\",\n    \"4.0.0-rc.50\",\n    \"4.0.0-rc.49\",\n    \"4.0.0-rc.48\",\n    \"4.0.0-rc.47\",\n    \"4.0.0-rc.46\",\n    \"4.0.0-rc.45\",\n    \"4.0.0-rc.44\",\n    \"4.0.0-rc.43\",\n    \"4.0.0-rc.42\",\n    \"4.0.0-rc.41\",\n    \"4.0.0-rc.40\",\n    \"4.0.0-rc.39\",\n    \"4.0.0-rc.38\",\n    \"4.0.0-rc.37\",\n    \"4.0.0-rc.36\",\n    \"4.0.0-rc.35\",\n    \"4.0.0-rc.34\",\n    \"4.0.0-rc.33\",\n    \"4.0.0-rc.32\",\n    \"4.0.0-rc.31\",\n    \"4.0.0-rc.30\",\n    \"4.0.0-rc.29\",\n    \"4.0.0-rc.28\",\n    \"4.0.0-rc.27\",\n    \"4.0.0-rc.26\",\n    \"4.0.0-rc.25\",\n    \"4.0.0-rc.24\",\n    \"4.0.0-rc.23\",\n    \"4.0.0-rc.22\",\n    \"4.0.0-rc.21\",\n    \"4.0.0-rc.20\",\n    \"4.0.0-rc.19\",\n    \"4.0.0-rc.18\",\n    \"4.0.0-rc.17\",\n    \"4.0.0-rc.16\",\n    \"4.0.0-rc.15\",\n    \"4.0.0-rc.14\",\n    \"4.0.0-rc.13\",\n    \"4.0.0-rc.12\",\n    \"4.0.0-rc.11\",\n    \"4.0.0-rc.10\",\n    \"4.0.0-rc.9\",\n    \"4.0.0-rc.8\",\n    \"4.0.0-rc.7\",\n    \"4.0.0-rc.6\",\n    \"4.0.0-rc.5\",\n    \"4.0.0-rc.4\",\n    \"4.0.0-rc.3\",\n    \"4.0.0-rc.2\",\n    \"4.0.0-rc.1\",\n    \"3.8.7\",\n    \"3.8.6\",\n    \"3.8.5\",\n    \"3.8.4\",\n    \"3.8.3\",\n    \"3.8.2\",\n    \"3.8.1\",\n    \"3.8.0\",\n    \"3.7.0\",\n    \"3.6.4\",\n    \"3.6.3\",\n    \"3.6.2\",\n    \"3.6.1\",\n    \"3.6.0\",\n    \"3.5.1\",\n    \"3.5.0\",\n    \"3.4.1\",\n    \"3.4.0\",\n    \"3.3.1\",\n    \"3.3.0\",\n    \"3.2.4\",\n    \"3.2.3\",\n    \"3.2.2\",\n    \"3.2.1\",\n    \"3.2.0\",\n    \"3.2.0-rc.16\",\n    \"3.2.0-rc.15\",\n    \"3.2.0-rc.14\",\n    \"3.2.0-rc.13\",\n    \"3.2.0-rc.12\",\n    \"3.2.0-rc.11\",\n    \"3.2.0-rc.10\",\n    \"3.2.0-rc.9\",\n    \"3.2.0-rc.8\",\n    \"3.2.0-rc.7\",\n    \"3.2.0-rc.6\",\n    \"3.2.0-rc.5\",\n    \"3.2.0-rc.4\",\n    \"3.2.0-rc.3\",\n    \"3.2.0-rc.2\",\n    \"3.2.0-rc.1\",\n    \"3.1.1\",\n    \"3.1.0\",\n    \"3.1.0-rc.13\",\n    \"3.1.0-rc.12\",\n    \"3.1.0-rc.11\",\n    \"3.1.0-rc.10\",\n    \"3.1.0-rc.9\",\n    \"3.1.0-rc.8\",\n    \"3.1.0-rc.7\",\n    \"3.1.0-rc.6\",\n    \"3.1.0-rc.5\",\n    \"3.1.0-rc.4\",\n    \"3.1.0-rc.3\",\n    \"3.1.0-rc.2\",\n    \"3.1.0-rc.1\",\n    \"3.0.2\",\n    \"3.0.1\",\n    \"3.0.1-rc.2\",\n    \"3.0.1-rc.1\",\n    \"3.0.0\",\n    \"3.0.0-rc.13\",\n    \"3.0.0-rc.12\",\n    \"3.0.0-rc.11\",\n    \"3.0.0-rc.10\",\n    \"3.0.0-rc.9\",\n    \"3.0.0-rc.8\",\n    \"3.0.0-rc.7\",\n    \"3.0.0-rc.6\",\n    \"3.0.0-rc.5\",\n    \"3.0.0-rc.4\",\n    \"3.0.0-rc.3\",\n    \"3.0.0-rc.2\",\n    \"3.0.0-rc.1\",\n    \"2.4.3\",\n    \"2.4.2\",\n    \"2.4.1\",\n    \"2.4.0\",\n    \"2.3.3\",\n    \"2.3.2\",\n    \"2.3.1\",\n    \"2.3.0\",\n    \"2.2.2\",\n    \"2.2.1\",\n    \"2.2.0\",\n    \"2.1.1\",\n    \"2.1.0\",\n    \"2.0.0-rc.36\",\n    \"2.0.0-rc.35\",\n    \"2.0.0-rc.34\",\n    \"2.0.0-rc.33\",\n    \"2.0.0-rc.32\",\n    \"2.0.0-rc.31\",\n    \"2.0.0-rc.30\",\n    \"2.0.0-rc.29\",\n    \"2.0.0-rc.28\",\n    \"2.0.0-rc.27\",\n    \"2.0.0-rc.26\",\n    \"2.0.0-rc.25\",\n    \"2.0.0-rc.24\",\n    \"2.0.0-rc.23\",\n    \"2.0.0-rc.22\",\n    \"2.0.0-rc.21\",\n    \"2.0.0-rc.20\",\n    \"2.0.0-rc.19\",\n    \"2.0.0-rc.18\",\n    \"2.0.0-rc.17\",\n    \"2.0.0-rc.16\",\n    \"2.0.0-rc.15\",\n    \"2.0.0-rc.14\",\n    \"2.0.0-rc.13\",\n    \"2.0.0-rc.12\",\n    \"2.0.0-rc.11\",\n    \"2.0.0-rc.10\",\n    \"2.0.0-rc.9\",\n    \"2.0.0-rc.8\",\n    \"2.0.0-rc.7\",\n    \"2.0.0-rc.6\",\n    \"2.0.0-rc.5\",\n    \"2.0.0-rc.4\"\n  ],\n  \"tips\": [\n    {\n      \"message\": \"**Did you know?** Yarn will display a useful tip each day, but they can be disabled via `enableTips: false`.\"\n    },\n    {\n      \"message\": \"**Did you know?** All `scripts` entries are run by a Posix-like JS interpreter. Even on Windows!\"\n    },\n    {\n      \"message\": \"**Did you know?** Yarn supports all three install types: node_modules, Plug'n'Play, and symlinks.\"\n    },\n    {\n      \"message\": \"**Did you know?** Constraints are a feature letting you write JS functions to validate your workspaces.\"\n    },\n    {\n      \"message\": \"**Did you know?** If it detects TypeScript, Yarn will auto-try to add the @types packages when needed.\"\n    },\n    {\n      \"message\": \"**Did you know?** Yarn can install workspaces from any git repository.\"\n    },\n    {\n      \"message\": \"**Did you know?** You can run scripts regardless of where you are in the project if they contain a colon; ex: `yarn build:frontend`.\"\n    },\n    {\n      \"message\": \"**Did you know?** You can run commands in any directory by adding the path as the first CLI parameter; ex: `yarn packages/client add clipanion`.\"\n    },\n    {\n      \"message\": \"**Did you know?** Yarn forbids by default unsecure http requests. This can be controlled via `unsafeHttpWhitelist`.\"\n    },\n    {\n      \"message\": \"**Did you know?** Package transpilation should be performed in `prepack` and not `prepublish`, which should only do package validation.\"\n    },\n    {\n      \"message\": \"**Did you know?** The `main`, `bin`, `exports`, ... fields can be overriden on publish by their counterparts found in `publishConfig`.\"\n    },\n    {\n      \"message\": \"**Did you know?** The Yarn shell lets you use `$1`, `$2`, and even `$@` in your `scripts` entries.\"\n    },\n    {\n      \"message\": \"**Did you know?** The `yarn patch` command lets you modify your dependencies and keep the changes in a separate patchfile.\"\n    },\n    {\n      \"message\": \"**Did you know?** You can build and try any Yarn pull request by running `yarn set version from sources --branch <PR#>`.\"\n    },\n    {\n      \"message\": \"**Did you know?** The `npmPublishRegistry` yarnrc setting lets you publish to a different registry than the one you fetch packages from.\"\n    },\n    {\n      \"message\": \"**Did you know?** Yarn's `portal:` or `link:` dependencies should be favored over per-tool alias configuration.\"\n    }\n  ]\n}",
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    },
+    {
+      "path": "npm-cache/_cacache/content-v2/sha512/09/0a/6758fac3c263f5f923075d986d2ed26ff74ca2c957e5b86b17e62342564ae142d5374d01ec5163c6f7091d93d2e0779c8da4083d8d0128f7408169781630",
+      "url": "https://registry.npmjs.org/is-odd/-/is-odd-3.0.1.tgz",
+      "mirrors": [
+        "https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz"
+      ],
+      "hash": "sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==",
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    },
+    {
+      "path": "npm-cache/_cacache/content-v2/sha512/5a/ed/551de20b04af0a016254022499417f781a6384e39460ebfe77f1f2b08a5a14bb6d4a9dc1246063eaa1bda8499e66513ef7bcb1ab1d08cac3728c3f07c3ce",
+      "url": "https://registry.npmjs.org/is-number/-/is-number-6.0.0.tgz",
+      "mirrors": [
+        "https://registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz"
+      ],
+      "hash": "sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==",
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    },
+    {
+      "path": "yarn-mirror/is-number-6.0.0.tgz",
+      "url": "https://registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz",
+      "mirrors": [
+        "https://registry.npmjs.org/is-number/-/is-number-6.0.0.tgz"
+      ],
+      "hash": "sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==",
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    },
+    {
+      "path": "yarn-mirror/is-odd-3.0.1.tgz",
+      "url": "https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz",
+      "mirrors": [
+        "https://registry.npmjs.org/is-odd/-/is-odd-3.0.1.tgz"
+      ],
+      "hash": "sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==",
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    }
+  ],
+  "repositories": [
+    {
+      "path": "git/217d62eabd23685a4e8b15685e53b5659611bfd1",
+      "git": {
+        "url": "https://git.example.invalid/classic-lockless-dependency.git",
+        "rev": "217d62eabd23685a4e8b15685e53b5659611bfd1",
+        "submodules": false,
+        "leaveDotGit": true,
+        "commitObject": "dHJlZSAzOGY3N2E2ZjQxMTA3YjFmYjllOWQyODhjMmM0MzE0M2RiZDMwNWNkCmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK"
+      },
+      "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "remote": "https://git.example.invalid/classic-lockless-dependency.git"
+    },
+    {
+      "path": "git/62db8b87e7e0dd57c8e2f01ccb226470e4a8eb20",
+      "git": {
+        "url": "https://git.example.invalid/classic-dependency.git",
+        "rev": "62db8b87e7e0dd57c8e2f01ccb226470e4a8eb20",
+        "submodules": false,
+        "leaveDotGit": true,
+        "commitObject": "dHJlZSA3NmY2NzljYjFkYjg5ODA0NTNlYzBiOTI4NGQzZDYxYWRhZGE1NTQwCmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK"
+      },
+      "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "remote": "https://git.example.invalid/classic-dependency.git"
+    },
+    {
+      "path": "git/6a79737227132cc161eb123439f55d6d55f1a16a",
+      "git": {
+        "url": "https://git.example.invalid/npm-lockless-dependency.git",
+        "rev": "6a79737227132cc161eb123439f55d6d55f1a16a",
+        "submodules": false,
+        "leaveDotGit": true,
+        "commitObject": "dHJlZSBlOTgxNmUyY2E3NDk5NWQ4MTQxODkxODJmNjM3OTRhMzZiYWU1N2Q2CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK"
+      },
+      "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "remote": "https://git.example.invalid/npm-lockless-dependency.git"
+    },
+    {
+      "path": "git/8b938fbbbbf11f649e6d0b698281934704c56a69",
+      "git": {
+        "url": "https://git.example.invalid/npm-dependency.git",
+        "rev": "8b938fbbbbf11f649e6d0b698281934704c56a69",
+        "submodules": false,
+        "leaveDotGit": true,
+        "commitObject": "dHJlZSA4MWU4YmMxMDUzMDZiY2QzYzczYTdlYzlhMWJmODFlODFlYTY3ODA2CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK"
+      },
+      "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "remote": "https://git.example.invalid/npm-dependency.git"
+    }
+  ],
+  "npmLocks": [
+    {
+      "manifestHash": "72e63d858528d26d0f70ffb94313daf9175ae08f362621c62fd93a69ebf12faa",
+      "packageLock": "{\n  \"name\": \"npm-lockless-dependency\",\n  \"version\": \"1.0.0\",\n  \"lockfileVersion\": 3,\n  \"requires\": true,\n  \"packages\": {\n    \"\": {\n      \"name\": \"npm-lockless-dependency\",\n      \"version\": \"1.0.0\",\n      \"devDependencies\": {\n        \"is-odd\": \"^3.0.1\"\n      }\n    },\n    \"node_modules/is-number\": {\n      \"version\": \"6.0.0\",\n      \"resolved\": \"https://registry.npmjs.org/is-number/-/is-number-6.0.0.tgz\",\n      \"integrity\": \"sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==\",\n      \"dev\": true,\n      \"license\": \"MIT\",\n      \"engines\": {\n        \"node\": \">=0.10.0\"\n      }\n    },\n    \"node_modules/is-odd\": {\n      \"version\": \"3.0.1\",\n      \"resolved\": \"https://registry.npmjs.org/is-odd/-/is-odd-3.0.1.tgz\",\n      \"integrity\": \"sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==\",\n      \"dev\": true,\n      \"license\": \"MIT\",\n      \"dependencies\": {\n        \"is-number\": \"^6.0.0\"\n      },\n      \"engines\": {\n        \"node\": \">=4\"\n      }\n    }\n  }\n}\n"
+    }
+  ],
+  "externals": [
+    {
+      "manifestHash": "1c33d6143b8233ba7c9414f40c66d9c62727ffd0ba5cdebb06bc5b57490fe69b",
+      "yarnLock": "# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.\n# yarn lockfile v1\n\n\nis-number@^6.0.0:\n  version \"6.0.0\"\n  resolved \"https://registry.yarnpkg.com/is-number/-/is-number-6.0.0.tgz#e6d15ad31fc262887cccf217ae5f9316f81b1995\"\n  integrity sha512-Wu1VHeILBK8KAWJUAiSZQX94GmOE45Rg6/538fKwiloUu21KncEkYGPqob2oSZ5mUT73vLGrHQjKw3KMPwfDzg==\n\nis-odd@^3.0.1:\n  version \"3.0.1\"\n  resolved \"https://registry.yarnpkg.com/is-odd/-/is-odd-3.0.1.tgz#65101baf3727d728b66fa62f50cda7f2d3989601\"\n  integrity sha512-CQpnWPrDwmP1+SMHXZhtLtJv90yiyVfluGsX5iNCVkrhQtU3TQHsUWPG9wkdk9Lgd5yNpAg9jQEo90CBaXgWMA==\n  dependencies:\n    is-number \"^6.0.0\"\n"
+    }
+  ]
+}
