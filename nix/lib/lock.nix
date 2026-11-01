@@ -9,8 +9,12 @@
 #               same file, and `hash` is its SRI hash
 #   externals   the yarn.lock files that the lock run resolved for git and
 #               GitHub dependencies whose repositories have none, as
-#               { key, yarnLock }: `key` is the SHA-256 of the
+#               { manifestHash, yarnLock }: `manifestHash` is the SHA-256 of the
 #               repository's package.json, by which the plugin finds it
+#   repositories the git repositories Yarn clones, as
+#               { path, git = { url, rev, submodules, leaveDotGit }, hash,
+#               remote }: a checkout of commit `rev` with its .git
+#               directory, and `remote`, the URL Yarn clones it from
 #   yarn        the Yarn release that runs the install: { path } for a
 #               release in the project, which .yarnrc.yml names in yarnPath,
 #               or { version, url, hash } for a release from
@@ -53,4 +57,5 @@ in
   );
   inherit (checked) yarn;
   externals = checked.externals or [ ];
+  repositories = checked.repositories or [ ];
 }

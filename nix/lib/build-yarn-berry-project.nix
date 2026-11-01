@@ -66,6 +66,8 @@
   buildInputs ? [ ],
   # Replaces the fetcher of the locked downloads.
   fetchurl ? null,
+  # Replaces the fetcher of the git repositories Yarn clones.
+  fetchgit ? null,
   # Filters the project root before it is copied into the store, as the
   # `filter` of builtins.path. The default leaves out installed
   # dependencies, Yarn's cache and install state, version control and Nix
@@ -111,9 +113,10 @@ let
 
   dependencies = callPackage ./served.nix (
     {
-      inherit (lock) downloads externals;
+      inherit (lock) downloads externals repositories;
     }
     // lib.optionalAttrs (args.fetchurl or null != null) { inherit (args) fetchurl; }
+    // lib.optionalAttrs (args.fetchgit or null != null) { inherit (args) fetchgit; }
   );
 
   plugin = pkgs.yarn-berry-purifier.plugin or (callPackage ../../pkgs/plugin { });
@@ -152,7 +155,11 @@ let
   build = stdenv.mkDerivation {
     name = "yarn-project-build";
     src = filteredSrc;
-    nativeBuildInputs = [ node ] ++ nativeBuildInputs;
+    nativeBuildInputs = [
+      node
+      pkgs.git
+    ]
+    ++ nativeBuildInputs;
     inherit buildInputs;
     dontConfigure = true;
     buildPhase = ''
@@ -185,7 +192,11 @@ let
   productionModules = stdenv.mkDerivation {
     name = "yarn-project-production-modules";
     src = filteredSrc;
-    nativeBuildInputs = [ node ] ++ nativeBuildInputs;
+    nativeBuildInputs = [
+      node
+      pkgs.git
+    ]
+    ++ nativeBuildInputs;
     inherit buildInputs;
     dontConfigure = true;
     # The installed packages lay their dependencies out in node_modules,

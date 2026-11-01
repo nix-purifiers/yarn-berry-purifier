@@ -296,6 +296,7 @@ module.exports = {
             }
           }
 
+          const repositories = await lockedRepositories(path.join(work, systems[0]), this.context.plugins);
           const yarn = await lockedYarn(configuration, root);
           const lock = {
             format: LOCK_FORMAT,
@@ -304,9 +305,10 @@ module.exports = {
             downloads: [...downloads.values()]
               .map((d) => ({ ...d, mirrors: registryMirrors(d.url), systems: d.systems.sort() }))
               .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+            repositories,
             externals: [...externals.entries()]
               .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-              .map(([key, yarnLock]) => ({ key, yarnLock })),
+              .map(([manifestHash, yarnLock]) => ({ manifestHash, yarnLock })),
           };
           fs.writeFileSync(path.join(root, LOCK_FILE), `${JSON.stringify(lock, null, 2)}\n`);
           this.context.stdout.write(`yarn-berry-purifier: wrote ${path.join(root, LOCK_FILE)}\n`);
@@ -381,6 +383,47 @@ module.exports = {
       }
     }
 
+    // The git repositories that Yarn clones for the project: every git
+    // dependency that is not on GitHub, whose tarballs Yarn downloads
+    // instead. Each is recorded with the URL Yarn clones, the locked commit
+    // and the hash of a checkout that keeps its .git directory, as
+    // nix-prefetch-git reports it. A sandboxed build serves the clones from
+    // those checkouts.
+    async function lockedRepositories(copy, plugins) {
+      const { gitUtils } = require("@yarnpkg/plugin-git");
+      const { githubUtils } = require("@yarnpkg/plugin-github");
+      const copyConfiguration = await Configuration.find(copy, plugins);
+      const { project } = await Project.find(copyConfiguration, copy);
+      const found = new Map();
+      // `originalPackages` holds the packages of the yarn.lock that
+      // Project.find reads.
+      for (const pkg of project.originalPackages.values()) {
+        const reference = pkg.reference;
+        if (!gitUtils.isGitUrl(reference) || githubUtils.isGithubUrl(reference)) continue;
+        const { repo, treeish } = gitUtils.splitRepoUrl(reference);
+        if (treeish.protocol !== "commit") continue;
+        const remote = gitUtils.normalizeRepoUrl(repo, { git: true });
+        found.set(`${remote}#${treeish.request}`, { remote, rev: treeish.request });
+      }
+      const repositories = [];
+      for (const { remote, rev } of found.values()) {
+        const url = fetchUrl(remote);
+        const prefetch = process.env.BERRY_PURIFIER_PREFETCH_GIT || "nix-prefetch-git";
+        const result = childProcess.spawnSync(prefetch, ["--url", url, "--rev", rev, "--leave-dotGit", "--quiet"], {
+          stdio: ["ignore", "pipe", "inherit"],
+        });
+        if (result.status !== 0) throw new Error(`yarn-berry-purifier: ${prefetch} failed for ${url} at ${rev}`);
+        const { hash } = JSON.parse(result.stdout.toString());
+        repositories.push({
+          path: `git/${rev}`,
+          git: { url, rev, submodules: false, leaveDotGit: true },
+          hash,
+          remote,
+        });
+      }
+      return repositories.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    }
+
     // The Yarn a sandboxed build runs: the release that .yarnrc.yml names
     // in yarnPath, which lies in the project, or else the release this
     // command runs in, downloaded from repo.yarnpkg.com.
@@ -409,6 +452,14 @@ function registryMirrors(url) {
   if (url.startsWith(yarn)) return [npm + url.slice(yarn.length)];
   if (url.startsWith(npm)) return [yarn + url.slice(npm.length)];
   return [];
+}
+
+// The URL a checkout of a repository is fetched from: the ssh URL of a
+// public forge becomes its https URL, which serves the same repository
+// without credentials.
+function fetchUrl(remote) {
+  const forge = /^ssh:\/\/(?:[^@/]+@)?(github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)\/(.*)$/.exec(remote);
+  return forge ? `https://${forge[1]}/${forge[2]}` : remote;
 }
 
 // Copies the project for a lock run, without what an install writes and

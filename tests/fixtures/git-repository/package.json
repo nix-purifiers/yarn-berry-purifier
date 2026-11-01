@@ -1,0 +1,8 @@
+{
+  "name": "git-dependency",
+  "version": "1.0.0",
+  "main": "built.js",
+  "scripts": {
+    "prepack": "node prepack.js"
+  }
+}

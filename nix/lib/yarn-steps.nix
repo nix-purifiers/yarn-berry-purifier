@@ -35,6 +35,13 @@ in
         spec: "@nix-purifiers/plugin-yarn-berry-purifier"
     EOF
     export BERRY_PURIFIER_SERVE=${dependencies}
+    # `git clone` of a locked repository clones the copy in the served
+    # directory.
+    export GIT_CONFIG_COUNT=${toString (builtins.length dependencies.gitConfig)}
+    ${lib.concatImapStrings (i: c: ''
+      export GIT_CONFIG_KEY_${toString (i - 1)}=${lib.escapeShellArg c.key}
+      export GIT_CONFIG_VALUE_${toString (i - 1)}=${lib.escapeShellArg c.value}
+    '') dependencies.gitConfig}
     export YARN_GLOBAL_FOLDER="$TMPDIR/yarn-global"
     export YARN_ENABLE_TELEMETRY=0
     export YARN_ENABLE_INLINE_BUILDS=1

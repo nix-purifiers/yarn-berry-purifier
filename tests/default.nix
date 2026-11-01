@@ -48,6 +48,13 @@ let
     hash = "sha512-suHnUk9lTydJ0ytOvLRiJHPLW8vEhd8gB+EqFU5QFipNeVUmdovF9bj4Fxe/153rJHKBPYb7WuLrVR+pyHKwjw==";
   };
 
+  # The repository of the git dependency in fixtures/git, and a stand-in for
+  # nix-prefetch-git that prints a hash without fetching.
+  gitRepository = pkgs.callPackage ./git-repository.nix { };
+  fakePrefetchGit = pkgs.writeShellScript "nix-prefetch-git" ''
+    echo '{ "hash": "${lib.fakeHash}" }'
+  '';
+
   # A lockfile check passes when `assertion` holds; it fails with
   # `message` otherwise.
   evalCheck =
@@ -257,6 +264,74 @@ in
         yarn purifier publish --tarball ${app.packages.hello-berry.tarball}/package.tgz
         jq -r '._attachments[].data' "$TMPDIR/body" | base64 -d > "$TMPDIR/uploaded.tgz"
         cmp "$TMPDIR/uploaded.tgz" ${app.packages.hello-berry.tarball}/package.tgz
+        touch $out
+      '';
+
+  # The lock run of a project with a git dependency that Yarn clones. The
+  # repository is the fixture repository, which git's insteadOf puts in
+  # place of the dependency's URL, so the run needs no network;
+  # nix-prefetch-git, which would fetch it, is replaced by a command that
+  # prints a hash. The lockfile records the URL Yarn clones and the locked
+  # commit. The check's output holds the yarn.lock and purifier lockfile of
+  # the run, from which fixtures/git was made.
+  git-record =
+    pkgs.runCommand "git-record-check"
+      {
+        nativeBuildInputs = [
+          pkgs.yarn-berry
+          pkgs.git
+          pkgs.jq
+        ];
+      }
+      ''
+        ${yarnWithPlugin}
+        cp -r ${./fixtures/git} project
+        chmod -R u+w project
+        cd project
+        rm -f yarn-berry-purifier.lock.json
+        # The release in the project spares the lock run its download of
+        # Yarn.
+        mkdir -p .yarn/releases
+        cp ${pkgs.yarn-berry}/bin/yarn .yarn/releases/yarn.cjs
+        echo 'yarnPath: .yarn/releases/yarn.cjs' >> .yarnrc.yml
+        export GIT_CONFIG_COUNT=2
+        export GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
+        export GIT_CONFIG_KEY_1=url.${gitRepository}.insteadOf
+        export GIT_CONFIG_VALUE_1=https://git.example.invalid/git-dependency.git
+        export BERRY_PURIFIER_PREFETCH_GIT=${fakePrefetchGit}
+        yarn install --mode=skip-build
+        yarn purifier lock --system x86_64-linux
+        jq -c .repositories yarn-berry-purifier.lock.json
+        jq -e '.repositories == [{
+          path: "git/55e425bf63e80624db0138ef7ff3ff32fe4c7ab5",
+          git: {
+            url: "https://git.example.invalid/git-dependency.git",
+            rev: "55e425bf63e80624db0138ef7ff3ff32fe4c7ab5",
+            submodules: false,
+            leaveDotGit: true
+          },
+          hash: "${lib.fakeHash}",
+          remote: "https://git.example.invalid/git-dependency.git"
+        }]' yarn-berry-purifier.lock.json
+        mkdir -p "$out"
+        cp yarn.lock yarn-berry-purifier.lock.json "$out"
+      '';
+
+  # The build of that project. Yarn clones the dependency in the sandbox
+  # from the served repository, through the insteadOf settings of the
+  # served directory, and packs it, which runs its prepack script.
+  # `fetchgit` returns the fixture repository in place of a clone of the
+  # dependency's URL.
+  git-build =
+    let
+      project = buildYarnBerryProject {
+        src = ./fixtures/git;
+        fetchgit = _: gitRepository;
+      };
+    in
+    pkgs.runCommand "git-build-check" { nativeBuildInputs = [ project.packages.uses-git-dependency ]; }
+      ''
+        uses-git-dependency | grep -qx 'cloned and packed'
         touch $out
       '';
 

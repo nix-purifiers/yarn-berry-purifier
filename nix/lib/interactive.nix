@@ -17,4 +17,4 @@ let
     inherit (pkgs.stdenv.hostPlatform) system;
   };
 in
-pkgs.callPackage ./served.nix { inherit (lock) downloads externals; }
+pkgs.callPackage ./served.nix { inherit (lock) downloads externals repositories; }
