@@ -1,5 +1,6 @@
 {
-  "format": 1,
+  "version": 1,
+  "contentHash": "sha256-KDfvWvnXHDcveJe1E8yExwiz1GOP1hIzBNDXzZeFHOg=",
   "inputsHash": "sha256-xjl4RqDutlK4NM/nglbQu6WRPpVcdJzXxbyU1VzyHRg=",
   "yarn": {
     "version": "4.18.1",

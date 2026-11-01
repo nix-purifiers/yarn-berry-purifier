@@ -1,17 +1,60 @@
 // SPDX-License-Identifier: MIT
 //
-// Unit tests of the plugin's URL handling and of its readers of the
-// lockfiles of npm and Yarn Classic. `node --test` runs them; the plugin
-// directory comes from the environment variable PLUGIN.
+// Unit tests of the plugin's URL handling, of its purifier lockfile
+// reading and writing, and of its readers of the lockfiles of npm and Yarn
+// Classic. `node --test` runs them; the plugin directory comes from the
+// environment variable PLUGIN.
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const zlib = require("node:zlib");
 const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
+const crypto = require("node:crypto");
 
 const plugin = require(path.join(process.env.PLUGIN, "purifier.cjs"));
 const foreign = require(path.join(process.env.PLUGIN, "foreign.cjs"));
-const { urlPath, fetchUrl, registryMirrors, stableUrl, isGithubArchive } = plugin.internals;
+const { urlPath, fetchUrl, registryMirrors, stableUrl, isGithubArchive, contentHash, readLock, writeLock } =
+  plugin.internals;
+
+test("contentHash ignores key order and the contentHash field", () => {
+  const a = contentHash({ version: 1, b: { y: 1, x: "é\n" }, a: [1] });
+  const b = contentHash({ a: [1], contentHash: "anything", b: { x: "é\n", y: 1 }, version: 1 });
+  assert.equal(a, b);
+  assert.match(a, /^sha256-/);
+});
+
+// A project directory with a yarn.lock, and the path of its purifier
+// lockfile, written by writeLock.
+function lockedProject() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "purifier-"));
+  fs.writeFileSync(path.join(root, "yarn.lock"), "# a yarn.lock\n");
+  const inputsHash = `sha256-${crypto.createHash("sha256").update("# a yarn.lock\n").digest("base64")}`;
+  const lockPath = path.join(root, "yarn-berry-purifier.lock.json");
+  writeLock(lockPath, { inputsHash, yarn: { path: ".yarn/releases/yarn.cjs" }, downloads: [] });
+  return { root, lockPath };
+}
+
+test("readLock reads what writeLock writes", () => {
+  const { root, lockPath } = lockedProject();
+  assert.equal(readLock(lockPath, root).version, 1);
+});
+
+test("readLock rejects an edited, stale or malformed lockfile with the command to run", () => {
+  const { root, lockPath } = lockedProject();
+  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  const fails = (text) => {
+    fs.writeFileSync(lockPath, text);
+    assert.throws(() => readLock(lockPath, root), /Run `yarn-berry-purifier lock`/);
+  };
+  fails(JSON.stringify({ ...lock, downloads: [{ path: "x" }] }));
+  fails(JSON.stringify({ ...lock, version: 2 }));
+  fails("{");
+  fs.writeFileSync(lockPath, JSON.stringify(lock));
+  fs.writeFileSync(path.join(root, "yarn.lock"), "# another yarn.lock\n");
+  assert.throws(() => readLock(lockPath, root), /another yarn.lock/);
+});
 
 const SYSTEMS = ["x86_64-linux", "aarch64-linux", "x86_64-darwin", "aarch64-darwin"];
 const INTEGRITY = "sha512-dKlgKLTrnih8yfGKBozBsVcGe0mS1/aKhCGPevK47XUNBMB+L0qk6zFw3YQnOFqH8dWqP9KNw9V+g1oOw4ew2g==";

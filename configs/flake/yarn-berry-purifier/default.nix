@@ -25,10 +25,11 @@
     };
   };
 
-  # `nix run github:nix-purifiers/yarn-berry-purifier -- purifier lock`
-  # runs Yarn with the plugin loaded. `nix develop
-  # github:nix-purifiers/yarn-berry-purifier` gives a shell where `yarn` is
-  # that wrapper, with Node.js beside it.
+  # `nix run github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier
+  # -- lock` writes the purifier lockfile, and `nix run
+  # github:nix-purifiers/yarn-berry-purifier` runs Yarn with the plugin
+  # loaded. `nix develop github:nix-purifiers/yarn-berry-purifier` gives a
+  # shell with that `yarn`, the `yarn-berry-purifier` command and Node.js.
   perSystem =
     { config, pkgs, ... }:
     {
@@ -36,6 +37,7 @@
       devShells.default = pkgs.mkShell {
         packages = [
           config.packages.yarn
+          config.packages.yarn-berry-purifier
           pkgs.nodejs
         ];
       };
@@ -66,7 +68,7 @@
             checks = import ../../../tests {
               inherit pkgs;
               overlay = self.overlays.default;
-              inherit (self.lib) purifier;
+              inherit (self.lib) purifier yarn-berry-purifier;
             };
             treefmt.programs.nixfmt.enable = true;
           };

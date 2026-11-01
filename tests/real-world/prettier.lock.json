@@ -1,5 +1,6 @@
 {
-  "format": 1,
+  "version": 1,
+  "contentHash": "sha256-7vdGIIHV6wPiYUu8lstr2F5YLJzm6/OPfPkppQ/+QDE=",
   "inputsHash": "sha256-V50ul8fZR1eKumclakfWWfwOthTShTglbmzAFIPCBfw=",
   "yarn": {
     "path": ".yarn/releases/yarn-4.18.1.cjs"

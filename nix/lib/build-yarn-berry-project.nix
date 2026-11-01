@@ -2,58 +2,56 @@
 #
 # buildYarnBerryProject: sandboxed builds of a Yarn Berry (Yarn 3 and later)
 # project, from its yarn.lock and the yarn-berry-purifier.lock.json that
-# `yarn purifier lock` writes beside it. The project needs no Nix files of
-# its own: the purifier lockfile names every file the install downloads,
-# with its hash, and the package.json files name the project's own packages
-# (the root and its workspaces).
+# `yarn-berry-purifier lock` writes beside it. The project needs no Nix
+# files of its own: the purifier lockfile names every file the install
+# downloads, with its hash, and the package.json files name the project's
+# own packages (the root and its workspaces).
 #
-# The file is a package for callPackage: the first argument set is what it
-# takes from the package set, and the result is the builder. The
-# yarn-berry-purifier overlay (`overlays.default`) adds it to the package
-# set as `buildYarnBerryProject`, so a package written for callPackage
-# takes it like any other dependency:
+# The flake's library publishes it as
+# `lib.yarn-berry-purifier.buildYarnBerryProject`:
 #
-#   { buildYarnBerryProject }:
-#   (buildYarnBerryProject { src = ./.; }).packages.my-app
+#   (yarn-berry-purifier.lib.yarn-berry-purifier.buildYarnBerryProject {
+#     inherit pkgs;
+#     src = ./.;
+#   }).packages.my-app
 #
-# and `buildYarnBerryProject.override` replaces what it takes from the
-# set. The builder returns
+# The first argument set is what the library overlay passes. The builder
+# returns
 #
-#   dependencies      the locked downloads for the build's system
-#   build             the project after `yarn install`, its build scripts
-#                     and `yarn pack`: one tarball per package of the
-#                     project
-#   productionModules the production dependencies, installed by
-#                     `yarn workspaces focus --production` with the
-#                     node-modules linker
 #   packages.<name>   package <name> of the project, installed with its
 #                     production dependencies under lib/node_modules, with
-#                     its commands in bin/; its `tarball` output holds
-#                     package.tgz, the file `yarn npm publish` uploads
+#                     its commands in bin/
+#   tests             the project after `yarn install`, its build scripts
+#                     and its `test` script, run in the sandbox
+#   release           the project after `yarn install`, its build scripts
+#                     and `yarn pack`: one tarball per package of the
+#                     project, the files `yarn-berry-purifier publish`
+#                     uploads
+#   fetches           the entries of the purifier library that the build
+#                     fetches on its system: the downloads, the git
+#                     repositories and the Yarn release
 {
-  lib,
-  stdenv,
-  callPackage,
-  fetchurl,
-  # The `purifier` namespace of the shared library, which the overlay
-  # passes from the flake's library.
+  # The `purifier` namespace of the shared library.
   purifier,
-  nodejs,
-  python3,
-  node-gyp,
-  autoPatchelfHook,
-  pkgs,
 }:
 {
+  # The package set the build takes its tools from.
+  pkgs,
   # The root of the Yarn project.
   src,
-  # The lockfile Yarn writes at the project root.
-  yarnLockFile ? src + "/yarn.lock",
-  # The purifier lockfile.
+  # Replaces fetchers of the purifier library, such as `fetchurl` with one
+  # that sends credentials to a company mirror. The purifier library's
+  # fetchEntry and tree take it unchanged.
+  fetchers ? { },
+  # Yarn's lockfile. A yarn.lock given outside `src` replaces the one in
+  # `src` during the build.
+  yarnLock ? src + "/yarn.lock",
+  # The purifier lockfile. A packaging flake can keep it outside `src`; it
+  # then replaces any copy in `src` during the build.
   lockFile ? src + "/yarn-berry-purifier.lock.json",
   # The Node.js that runs Yarn and the project's scripts, and that the
   # packages' commands run on.
-  node ? nodejs,
+  node ? pkgs.nodejs,
   # The workspaces to build, by package name, in the order their scripts
   # run, or null for every package of the project. When it is a list, the
   # install covers only these workspaces and their dependencies
@@ -67,32 +65,32 @@
   # packages are packed. A script the root package defines runs at the
   # root; otherwise it runs in each workspace that defines it.
   buildScripts ? [ "build" ],
-  # Runs the `test` script the same way, after the build scripts.
-  doCheck ? false,
   # Tools the build scripts and the dependencies' install scripts need.
   # Python and node-gyp are there for native addons; setuptools gives the
   # older node-gyp releases that packages bundle the distutils module,
   # which Python 3.12 removed.
   nativeBuildInputs ? [
-    (python3.withPackages (ps: [ ps.setuptools ]))
-    node-gyp
+    (pkgs.python3.withPackages (ps: [ ps.setuptools ]))
+    pkgs.node-gyp
   ],
   # Libraries native addons link against.
   buildInputs ? [ ],
-  # Replaces the fetcher of the locked downloads.
-  fetchurl ? null,
-  # Replaces the fetcher of the git repositories Yarn clones.
-  fetchgit ? null,
   # Filters the project root before it is copied into the store, as the
   # `filter` of builtins.path. The default leaves out installed
   # dependencies, Yarn's cache and install state, version control and Nix
   # result links.
   srcFilter ? null,
-}@args:
+}:
 let
+  inherit (pkgs) lib stdenv;
+
   lock = import ./lock.nix {
-    inherit lib lockFile yarnLockFile;
+    inherit lib lockFile yarnLock;
     inherit (stdenv.hostPlatform) system;
+  };
+
+  fetchArgs = fetchers // {
+    inherit pkgs;
   };
 
   allPackages = import ./workspaces.nix { inherit lib src; };
@@ -153,21 +151,17 @@ let
     filter = if srcFilter != null then srcFilter else defaultSrcFilter;
   };
 
-  dependencies = callPackage ./served.nix (
-    {
-      inherit purifier;
-      inherit (lock)
-        downloads
-        npmLocks
-        externals
-        repositories
-        ;
-    }
-    // lib.optionalAttrs (args.fetchurl or null != null) { inherit (args) fetchurl; }
-    // lib.optionalAttrs (args.fetchgit or null != null) { inherit (args) fetchgit; }
-  );
+  dependencies = pkgs.callPackage ./served.nix {
+    inherit purifier fetchers;
+    inherit (lock)
+      downloads
+      npmLocks
+      externals
+      repositories
+      ;
+  };
 
-  plugin = pkgs.yarn-berry-purifier.plugin or (callPackage ../../pkgs/plugin { });
+  plugin = pkgs.yarn-berry-purifier.plugin or (pkgs.callPackage ../../pkgs/plugin { });
 
   steps = import ./yarn-steps.nix {
     inherit
@@ -176,10 +170,18 @@ let
       plugin
       dependencies
       ;
-    fetchurl = pkgs.fetchurl;
     inherit (pkgs) runtimeShell;
-    yarnRelease = lock.yarn;
+    yarnJs =
+      if lock.release == null then "./${lock.yarn.path}" else purifier.fetchEntry fetchArgs lock.release;
   };
+
+  # The lockfiles given to the builder replace those in the project, so
+  # Yarn and the plugin read the given ones.
+  useLockfiles = ''
+    cp ${yarnLock} yarn.lock
+    cp ${lockFile} yarn-berry-purifier.lock.json
+    chmod u+w yarn.lock yarn-berry-purifier.lock.json
+  '';
 
   # Prebuilt Linux binaries in packages, such as turbo's, get their dynamic
   # loader and libraries from the store, and scripts get their
@@ -187,7 +189,7 @@ let
   # install with --mode=skip-build lays the packages out without running
   # their build scripts; the files are patched in node_modules and
   # .yarn/unplugged, and a second install runs the build scripts.
-  binaryPatching = lib.optionals stdenv.hostPlatform.isLinux [ autoPatchelfHook ];
+  binaryPatching = lib.optionals stdenv.hostPlatform.isLinux [ pkgs.autoPatchelfHook ];
   binaryLibraries = lib.optionals stdenv.hostPlatform.isLinux [ stdenv.cc.cc.lib ];
   patchInstalled = ''
     patchInstalled() {
@@ -204,7 +206,7 @@ let
     }
   '';
 
-  # The file name of a package's tarball in `build`.
+  # The file name of a package's tarball in `release`.
   tarballName = p: (builtins.replaceStrings [ "@" "/" ] [ "" "__" ] p.name) + ".tgz";
 
   # Runs package script $1 at the root when the root defines it and no
@@ -227,34 +229,49 @@ let
     }
   '';
 
-  build = stdenv.mkDerivation {
+  # The project after `yarn install` and its build scripts, followed by
+  # `scripts`, and installed by `installPhase`.
+  projectBuild =
+    {
+      name,
+      scripts,
+      installPhase,
+    }:
+    stdenv.mkDerivation {
+      inherit name installPhase;
+      src = filteredSrc;
+      nativeBuildInputs = [
+        node
+        pkgs.git
+      ]
+      ++ nativeBuildInputs
+      ++ binaryPatching;
+      buildInputs = buildInputs ++ binaryLibraries;
+      autoPatchelfIgnoreMissingDeps = [ "*" ];
+      dontConfigure = true;
+      buildPhase = ''
+        runHook preBuild
+        ${useLockfiles}
+        ${steps.setup}
+        ${patchInstalled}
+        YARN_ENABLE_SCRIPTS=0 ${install false}
+        patchInstalled
+        ${install false}
+        ${runScript}
+        for script in ${lib.escapeShellArgs (buildScripts ++ scripts)}; do
+          runScript "$script"
+        done
+        runHook postBuild
+      '';
+      dontFixup = true;
+    };
+
+  # `yarn pack` runs the packages' prepack and postpack scripts, as
+  # `yarn npm publish` does. The tarballs are what Yarn publishes, byte
+  # for byte.
+  release = projectBuild {
     name = "yarn-project-build";
-    src = filteredSrc;
-    nativeBuildInputs = [
-      node
-      pkgs.git
-    ]
-    ++ nativeBuildInputs
-    ++ binaryPatching;
-    buildInputs = buildInputs ++ binaryLibraries;
-    autoPatchelfIgnoreMissingDeps = [ "*" ];
-    dontConfigure = true;
-    buildPhase = ''
-      runHook preBuild
-      ${steps.setup}
-      ${patchInstalled}
-      YARN_ENABLE_SCRIPTS=0 ${install false}
-      patchInstalled
-      ${install false}
-      ${runScript}
-      for script in ${lib.escapeShellArgs buildScripts}; do
-        runScript "$script"
-      done
-      ${lib.optionalString doCheck "runScript test"}
-      runHook postBuild
-    '';
-    # `yarn pack` runs the packages' prepack and postpack scripts, as
-    # `yarn npm publish` does.
+    scripts = [ ];
     installPhase = ''
       runHook preInstall
       mkdir -p "$out"
@@ -265,8 +282,16 @@ let
       '') ownPackages}
       runHook postInstall
     '';
-    # The tarballs are what Yarn publishes, byte for byte.
-    dontFixup = true;
+  };
+
+  tests = projectBuild {
+    name = "yarn-project-tests";
+    scripts = [ "test" ];
+    installPhase = ''
+      runHook preInstall
+      touch "$out"
+      runHook postInstall
+    '';
   };
 
   productionModules = stdenv.mkDerivation {
@@ -286,6 +311,7 @@ let
     # install uses the node-modules linker whatever the project uses.
     buildPhase = ''
       runHook preBuild
+      ${useLockfiles}
       ${steps.setup}
       ${patchInstalled}
       export YARN_NODE_LINKER=node-modules
@@ -328,10 +354,6 @@ let
     stdenv.mkDerivation {
       pname = builtins.replaceStrings [ "@" "/" ] [ "" "-" ] p.name;
       inherit (p) version;
-      outputs = [
-        "out"
-        "tarball"
-      ];
       dontUnpack = true;
       dontConfigure = true;
       dontBuild = true;
@@ -340,8 +362,7 @@ let
       installPhase = ''
         runHook preInstall
         modules="$out/lib/node_modules"
-        mkdir -p "$modules" "$tarball"
-        cp ${build}/${lib.escapeShellArg (tarballName p)} "$tarball/package.tgz"
+        mkdir -p "$modules"
         if [ -d ${productionModules}/node_modules ]; then
           cp -a ${productionModules}/node_modules/. "$modules/"
           chmod -R u+w "$modules"
@@ -350,7 +371,7 @@ let
         ${lib.concatMapStrings (o: ''
           rm -rf "$modules"/${lib.escapeShellArg o.name}
           mkdir -p "$modules"/${lib.escapeShellArg o.name}
-          tar -xzf ${build}/${lib.escapeShellArg (tarballName o)} --strip-components=1 \
+          tar -xzf ${release}/${lib.escapeShellArg (tarballName o)} --strip-components=1 \
             -C "$modules"/${lib.escapeShellArg o.name}
           ${lib.optionalString (o.dir != "") ''
             if [ -d ${productionModules}/${lib.escapeShellArg o.dir}/node_modules ]; then
@@ -379,6 +400,7 @@ let
     };
 in
 {
-  inherit dependencies build productionModules;
   packages = lib.mapAttrs (_: mkPackage) ownPackageSet;
+  inherit tests release;
+  fetches = lock.downloads ++ lock.repositories ++ lib.optional (lock.release != null) lock.release;
 }

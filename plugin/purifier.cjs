@@ -14,13 +14,15 @@
 //                                      where Nix laid out the locked files,
 //                                      and makes no request (a sandboxed
 //                                      build)
-//   neither                            in a project whose purifier lockfile
-//                                      matches its yarn.lock, builds that
-//                                      directory through Nix and serves
-//                                      from it (interactive use)
+//   neither                            in a project with a purifier
+//                                      lockfile, builds that directory
+//                                      through Nix and serves from it
+//                                      (interactive use)
 //
 // A file lies in the directory at urlPath(url). The plugin also adds the
-// `yarn purifier lock` command, which writes yarn-berry-purifier.lock.json.
+// `yarn purifier lock`, `yarn purifier prefetch` and `yarn purifier
+// publish` commands, which the `yarn-berry-purifier` command runs as
+// `yarn-berry-purifier lock`, `prefetch` and `publish`.
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -40,7 +42,8 @@ const PURIFIER = `(builtins.getFlake "path:${FLAKE}").lib.purifier`;
 
 const PLUGIN_NAME = "@nix-purifiers/plugin-yarn-berry-purifier";
 const LOCK_FILE = "yarn-berry-purifier.lock.json";
-const LOCK_FORMAT = 1;
+const LOCK_VERSION = 1;
+const LOCK_COMMAND = "yarn-berry-purifier lock";
 
 // The Nix systems a lockfile covers, as the platform Yarn installs for on
 // each.
@@ -76,13 +79,106 @@ function findRoot(cwd) {
   }
 }
 
-function inputsHash(root) {
-  return `sha256-${crypto.createHash("sha256").update(fs.readFileSync(path.join(root, "yarn.lock"))).digest("base64")}`;
+function sha256(buffer) {
+  return `sha256-${crypto.createHash("sha256").update(buffer).digest("base64")}`;
 }
 
-// The directory of locked files that interactive use serves from, built
-// through Nix once per lockfile and kept under .yarn/purifier, or null when
-// the project has no purifier lockfile that matches its yarn.lock.
+function inputsHash(root) {
+  return sha256(fs.readFileSync(path.join(root, "yarn.lock")));
+}
+
+// A value with the keys of every object sorted, so that JSON.stringify
+// writes it as Nix's builtins.toJSON writes the same value.
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value !== null && typeof value === "object") {
+    const sorted = {};
+    for (const key of Object.keys(value).sort()) sorted[key] = canonical(value[key]);
+    return sorted;
+  }
+  return value;
+}
+
+// The hash a purifier lockfile records of its own content: the SHA-256 of
+// the lockfile without `contentHash`, written as canonical JSON with no
+// whitespace. nix/lib/lock.nix computes the same hash.
+function contentHash(lock) {
+  const { contentHash: _, ...rest } = lock;
+  return sha256(JSON.stringify(canonical(rest)));
+}
+
+// Reads the purifier lockfile at lockPath for the project at root, and
+// throws an error that names the command to run when the lockfile is
+// malformed, edited, or written for another yarn.lock.
+function readLock(lockPath, root) {
+  const fail = (problem) => {
+    throw new Error(`yarn-berry-purifier: ${lockPath} ${problem}. Run \`${LOCK_COMMAND}\`.`);
+  };
+  let lock;
+  try {
+    lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  } catch {
+    fail("is not valid JSON");
+  }
+  if (lock === null || typeof lock !== "object" || Array.isArray(lock)) fail("holds no JSON object");
+  if (lock.version !== LOCK_VERSION) {
+    fail(`has version ${JSON.stringify(lock.version)}, and this yarn-berry-purifier reads version ${LOCK_VERSION}`);
+  }
+  if (lock.contentHash !== contentHash(lock)) fail("was changed after it was written; its contentHash does not match");
+  if (lock.inputsHash !== inputsHash(root)) fail("was written for another yarn.lock");
+  return lock;
+}
+
+// The purifier lockfile of the project at root: the one at the root, or
+// the one outside the project that the last `yarn-berry-purifier prefetch
+// --lockfile` used, or null when there is neither.
+function projectLockPath(root) {
+  const own = path.join(root, LOCK_FILE);
+  if (fs.existsSync(own)) return own;
+  const recorded = path.join(root, ".yarn", "purifier", "lockfile");
+  if (fs.existsSync(recorded)) {
+    const external = fs.readFileSync(recorded, "utf8");
+    if (fs.existsSync(external)) return external;
+  }
+  return null;
+}
+
+// Builds the directory of locked files through Nix, unless the one under
+// .yarn/purifier was built from the same lockfile, and returns its path.
+// The link keeps it alive as a garbage-collector root.
+function buildDownloads(root, lockPath) {
+  readLock(lockPath, root);
+  const link = path.join(root, ".yarn", "purifier", "downloads");
+  const stamp = `${link}.stamp`;
+  const current = crypto.createHash("sha256").update(fs.readFileSync(lockPath)).digest("hex");
+  if (!fs.existsSync(link) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8") !== current) {
+    process.stderr.write(`yarn-berry-purifier: building the downloads of ${lockPath}\n`);
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    nixBuild(link, "interactive.nix", { BERRY_PURIFIER_LOCK: lockPath, BERRY_PURIFIER_YARN_LOCK: path.join(root, "yarn.lock") });
+    fs.writeFileSync(stamp, current);
+  }
+  return link;
+}
+
+// Builds nix/lib/<file> for the purifier lockfile and yarn.lock that the
+// environment variables name, with a garbage-collector root at `link`.
+function nixBuild(link, file, env) {
+  childProcess.execFileSync(
+    "nix",
+    [
+      "build",
+      "--impure",
+      "--out-link",
+      link,
+      "--expr",
+      `import ${NIX_LIB}/${file} { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; yarnLock = /. + builtins.getEnv "BERRY_PURIFIER_YARN_LOCK"; }`,
+    ],
+    { stdio: ["ignore", "inherit", "inherit"], env: { ...process.env, ...env } },
+  );
+}
+
+// The directory of locked files that interactive use serves from, or null
+// when the project has no purifier lockfile.
 let interactiveDir;
 function interactiveDownloads() {
   if (interactiveDir !== undefined) return interactiveDir;
@@ -90,36 +186,9 @@ function interactiveDownloads() {
   if (process.env.BERRY_PURIFIER === "0") return null;
   const root = findRoot(process.cwd());
   if (root === null) return null;
-  const lockPath = path.join(root, LOCK_FILE);
-  if (!fs.existsSync(lockPath)) return null;
-  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
-  if (lock.inputsHash !== inputsHash(root)) {
-    process.stderr.write(
-      `yarn-berry-purifier: yarn.lock changed since ${LOCK_FILE} was written; Yarn downloads as usual until \`yarn purifier lock\` renews it.\n`,
-    );
-    return null;
-  }
-  const link = path.join(root, ".yarn", "purifier", "downloads");
-  const stamp = `${link}.stamp`;
-  const current = crypto.createHash("sha256").update(fs.readFileSync(lockPath)).digest("hex");
-  if (!fs.existsSync(link) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8") !== current) {
-    process.stderr.write(`yarn-berry-purifier: building the downloads of ${lockPath}\n`);
-    fs.mkdirSync(path.dirname(link), { recursive: true });
-    childProcess.execFileSync(
-      "nix",
-      [
-        "build",
-        "--impure",
-        "--out-link",
-        link,
-        "--expr",
-        `import ${NIX_LIB}/interactive.nix { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; }`,
-      ],
-      { stdio: ["ignore", "inherit", "inherit"], env: { ...process.env, BERRY_PURIFIER_LOCK: lockPath } },
-    );
-    fs.writeFileSync(stamp, current);
-  }
-  interactiveDir = link;
+  const lockPath = projectLockPath(root);
+  if (lockPath === null) return null;
+  interactiveDir = buildDownloads(root, lockPath);
   return interactiveDir;
 }
 
@@ -127,7 +196,7 @@ function serveFrom(dir, target) {
   const file = path.join(dir, urlPath(target));
   if (!fs.existsSync(file)) {
     throw new Error(
-      `yarn-berry-purifier: ${target} is not in ${LOCK_FILE}. Run \`yarn purifier lock\` to record the project's downloads.`,
+      `yarn-berry-purifier: ${target} is not in the purifier lockfile. Run \`${LOCK_COMMAND}\` to record the project's downloads, or set BERRY_PURIFIER=0 to download as Yarn does without the plugin.`,
     );
   }
   return { statusCode: 200, headers: {}, body: fs.readFileSync(file) };
@@ -286,6 +355,10 @@ module.exports = {
         description: "A Nix system to lock for; the default is every system yarn-berry-purifier knows",
       });
 
+      lockfile = Option.String("--lockfile", {
+        description: `Write the purifier lockfile at this path instead of ${LOCK_FILE} at the project root`,
+      });
+
       async execute() {
         // The lock command downloads what it records, also in a project
         // whose current purifier lockfile interactive use would serve from.
@@ -406,8 +479,7 @@ module.exports = {
           }
 
           const yarn = await lockedYarn(configuration, root);
-          const lock = {
-            format: LOCK_FORMAT,
+          const content = {
             inputsHash: inputsHash(root),
             yarn,
             downloads: [...downloads.values()]
@@ -425,12 +497,67 @@ module.exports = {
               .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
               .map(([manifestHash, yarnLock]) => ({ manifestHash, yarnLock })),
           };
-          fs.writeFileSync(path.join(root, LOCK_FILE), `${JSON.stringify(lock, null, 2)}\n`);
-          this.context.stdout.write(`yarn-berry-purifier: wrote ${path.join(root, LOCK_FILE)}\n`);
+          const lockPath = this.lockfile ? path.resolve(this.context.cwd, this.lockfile) : path.join(root, LOCK_FILE);
+          writeLock(lockPath, content);
+          this.context.stdout.write(`yarn-berry-purifier: wrote ${lockPath}\n`);
           return 0;
         } finally {
           fs.rmSync(work, { recursive: true, force: true });
         }
+      }
+    }
+
+    // `yarn purifier prefetch` realizes in the Nix store what the everyday
+    // loop needs from the purifier lockfile for the current system, and
+    // keeps it alive with garbage-collector roots under .yarn/purifier: the
+    // locked downloads, which the plugin then serves to `yarn install`; the
+    // Yarn release the lockfile names; and the Node.js and Yarn this
+    // command runs on. Afterwards `yarn install` and the project's scripts
+    // run with no network. Editors read the project's tools, such as
+    // TypeScript's language server, from the installed dependencies.
+    class PrefetchCommand extends BaseCommand {
+      static paths = [["purifier", "prefetch"]];
+
+      lockfile = Option.String("--lockfile", {
+        description: `Read the purifier lockfile at this path instead of ${LOCK_FILE} at the project root`,
+      });
+
+      async execute() {
+        const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
+        const { project } = await Project.find(configuration, this.context.cwd);
+        const root = path.resolve(project.cwd);
+        const own = path.join(root, LOCK_FILE);
+        const lockPath = this.lockfile ? path.resolve(this.context.cwd, this.lockfile) : own;
+        if (!fs.existsSync(lockPath)) {
+          throw new Error(`yarn-berry-purifier: ${lockPath} does not exist. Run \`${LOCK_COMMAND}\`.`);
+        }
+        const lock = readLock(lockPath, root);
+        const dir = path.join(root, ".yarn", "purifier");
+        fs.mkdirSync(dir, { recursive: true });
+        // Interactive use finds a purifier lockfile outside the project
+        // through this file.
+        const recorded = path.join(dir, "lockfile");
+        if (lockPath === own) fs.rmSync(recorded, { force: true });
+        else fs.writeFileSync(recorded, lockPath);
+        buildDownloads(root, lockPath);
+        if (lock.yarn && lock.yarn.url) {
+          nixBuild(path.join(dir, "yarn-release"), "release.nix", {
+            BERRY_PURIFIER_LOCK: lockPath,
+            BERRY_PURIFIER_YARN_LOCK: path.join(root, "yarn.lock"),
+          });
+        }
+        for (const [name, file] of [
+          ["node", process.execPath],
+          ["yarn", process.argv[1]],
+        ]) {
+          const store = /^\/nix\/store\/[^/]+/.exec(fs.realpathSync(file));
+          if (!store) continue;
+          childProcess.execFileSync("nix-store", ["--realise", store[0], "--add-root", path.join(dir, name)], {
+            stdio: ["ignore", "ignore", "inherit"],
+          });
+        }
+        this.context.stdout.write(`yarn-berry-purifier: prefetched ${lockPath} into ${dir}\n`);
+        return 0;
       }
     }
 
@@ -445,6 +572,9 @@ module.exports = {
       tag = Option.String("--tag", "latest", { description: "The tag on the registry that the package should be attached to" });
       otp = Option.String("--otp", { description: "The OTP token to use with the command" });
       tarball = Option.String("--tarball", { description: "Publish this tarball instead of building one" });
+      lockfile = Option.String("--lockfile", {
+        description: `Build with the purifier lockfile at this path instead of ${LOCK_FILE} at the project root`,
+      });
 
       async execute() {
         const { npmConfigUtils, npmHttpUtils, npmPublishUtils } = require("@yarnpkg/plugin-npm");
@@ -452,13 +582,15 @@ module.exports = {
         const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
         const { project, workspace } = await Project.find(configuration, this.context.cwd);
         if (!workspace || !workspace.manifest.name) {
-          throw new Error("yarn-berry-purifier: run `yarn purifier publish` in the workspace to publish");
+          throw new Error("yarn-berry-purifier: run `yarn-berry-purifier publish` in the workspace to publish");
         }
         const ident = workspace.manifest.name;
         const name = structUtils.stringifyIdent(ident);
         let tarball = this.tarball;
         if (!tarball) {
           this.context.stdout.write(`yarn-berry-purifier: building the tarball of ${name}\n`);
+          const root = path.resolve(project.cwd);
+          const lockPath = this.lockfile ? path.resolve(this.context.cwd, this.lockfile) : path.join(root, LOCK_FILE);
           const out = childProcess
             .execFileSync(
               "nix",
@@ -468,11 +600,16 @@ module.exports = {
                 "--no-link",
                 "--print-out-paths",
                 "--expr",
-                `import ${NIX_LIB}/publish.nix { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
+                `import ${NIX_LIB}/publish.nix { pkgs = import ${NIXPKGS} { }; purifier = ${PURIFIER}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
               ],
               {
                 stdio: ["ignore", "pipe", "inherit"],
-                env: { ...process.env, BERRY_PURIFIER_SRC: path.resolve(project.cwd), BERRY_PURIFIER_PACKAGE: name },
+                env: {
+                  ...process.env,
+                  BERRY_PURIFIER_SRC: root,
+                  BERRY_PURIFIER_LOCK: lockPath,
+                  BERRY_PURIFIER_PACKAGE: name,
+                },
               },
             )
             .toString()
@@ -589,10 +726,18 @@ module.exports = {
 
     return {
       hooks: { wrapNetworkRequest, setupScriptEnvironment, afterAllInstalled },
-      commands: [LockCommand, PublishCommand],
+      commands: [LockCommand, PrefetchCommand, PublishCommand],
     };
   },
 };
+
+// Writes a purifier lockfile with the given content, its version and the
+// hash of its content, as JSON indented by two spaces.
+function writeLock(lockPath, content) {
+  const withVersion = { version: LOCK_VERSION, ...content };
+  const lock = { version: LOCK_VERSION, contentHash: contentHash(withVersion), ...content };
+  fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+}
 
 // Yarn's registry and npm's registry serve the same tarballs at the same
 // paths, so a tarball from either has the other as its mirror.
@@ -669,4 +814,14 @@ function copyProject(from, to) {
 
 // The helpers the unit tests in tests/unit.test.cjs exercise. Yarn reads
 // only `name` and `factory`.
-module.exports.internals = { urlPath, fetchUrl, registryMirrors, stableUrl, isGithubArchive };
+module.exports.internals = {
+  urlPath,
+  fetchUrl,
+  registryMirrors,
+  stableUrl,
+  isGithubArchive,
+  canonical,
+  contentHash,
+  readLock,
+  writeLock,
+};

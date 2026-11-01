@@ -36,20 +36,17 @@
   repositories ? [ ],
   # The resolved package-lock.json files, as nix/lib/lock.nix returns them.
   npmLocks ? [ ],
-  # Replaces the fetcher of the locked downloads.
-  fetchurl ? null,
-  # Replaces the fetcher of the git checkouts.
-  fetchgit ? null,
+  # Replaces fetchers of the purifier library; its fetchEntry and tree take
+  # it unchanged.
+  fetchers ? { },
 }:
 let
-  fetchers = {
+  fetchArgs = fetchers // {
     inherit pkgs;
-  }
-  // lib.optionalAttrs (fetchurl != null) { inherit fetchurl; }
-  // lib.optionalAttrs (fetchgit != null) { inherit fetchgit; };
+  };
 
   dependencies = purifier.tree (
-    fetchers
+    fetchArgs
     // {
       name = "yarn-berry-purifier-dependencies";
       entries = downloads ++ repositories;
@@ -71,7 +68,7 @@ let
       git init -q --bare "$out"
       export GIT_DIR="$out"
       ${lib.concatMapStrings (r: ''
-        cp -r --no-preserve=mode ${purifier.fetchEntry fetchers r}/.git/objects/. "$out/objects"
+        cp -r --no-preserve=mode ${purifier.fetchEntry fetchArgs r}/.git/objects/. "$out/objects"
         echo ${r.git.rev} >> "$out/shallow"
         git update-ref refs/heads/purifier-${r.git.rev} ${r.git.rev}
       '') rs}

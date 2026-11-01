@@ -1,34 +1,65 @@
 # SPDX-License-Identifier: MIT
 #
 # The flake's checks. Every one builds in the sandbox; the only network
-# access is the fixed-output fetches of locked downloads.
+# access is the fixed-output fetches of locked downloads and the relock.
+# The `conformance-*` checks are those of the purifier contract.
 {
   pkgs,
-  # The flake's default package overlay, which adds buildYarnBerryProject.
+  # The flake's default package overlay, which adds the plugin, the `yarn`
+  # wrapper and the `yarn-berry-purifier` command.
   overlay,
   # The `purifier` namespace of the shared library, from the flake's
   # library.
   purifier,
+  # The `yarn-berry-purifier` namespace of the flake's library.
+  yarn-berry-purifier,
 }:
 let
   inherit (pkgs) lib;
 
-  # Every fixture builds the way a consumer's package does: through
-  # buildYarnBerryProject of a package set the overlay applies to.
   withOverlay = pkgs.extend overlay;
-  inherit (withOverlay) buildYarnBerryProject;
   inherit (withOverlay.yarn-berry-purifier) plugin;
+
+  # Every fixture builds the way a consumer's package does: through the
+  # builder of the flake's library.
+  buildYarnBerryProject =
+    args: yarn-berry-purifier.buildYarnBerryProject ({ pkgs = withOverlay; } // args);
 
   # One package with a build script, a test script, a command, a
   # dependency and a dev dependency, installed with Plug'n'Play.
-  app = buildYarnBerryProject {
-    src = ./fixtures/app;
-    doCheck = true;
-  };
+  app = buildYarnBerryProject { src = ./fixtures/app; };
 
   # A workspace that depends on another workspace, a GitHub dependency, a
   # patch that adds a file, and portal:, link: and file: dependencies.
   sources = buildYarnBerryProject { src = ./fixtures/sources; };
+
+  # The directory the plugin serves fixtures/app from in interactive use
+  # and after `yarn-berry-purifier prefetch`.
+  servedApp = import ../nix/lib/interactive.nix {
+    inherit purifier;
+    pkgs = withOverlay;
+    lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
+    yarnLock = ./fixtures/app/yarn.lock;
+  };
+
+  sri =
+    text:
+    builtins.convertHash {
+      hash = builtins.hashString "sha256" text;
+      hashAlgo = "sha256";
+      toHashFormat = "sri";
+    };
+
+  # A purifier lockfile with `version` 1 and the contentHash of its content,
+  # as `yarn-berry-purifier lock` writes it.
+  sealed =
+    content:
+    let
+      withVersion = content // {
+        version = 1;
+      };
+    in
+    withVersion // { contentHash = sri (builtins.toJSON withVersion); };
 
   # Reads a purifier lockfile written inline, for a yarn.lock with the
   # given text.
@@ -37,18 +68,33 @@ let
     import ../nix/lib/lock.nix {
       inherit lib system;
       lockFile = builtins.toFile "yarn-berry-purifier.lock.json" (builtins.toJSON lock);
-      yarnLockFile = builtins.toFile "yarn.lock" yarnLock;
+      yarnLock = builtins.toFile "yarn.lock" yarnLock;
     };
+  # Whether reading the lockfile fails evaluation.
+  lockFails =
+    lock: yarnLock:
+    !(builtins.tryEval (builtins.deepSeq (readLock "x86_64-linux" lock yarnLock).downloads true))
+    .success;
   yarnLockText = "# a yarn.lock\n";
-  yarnLockHash = builtins.convertHash {
-    hash = builtins.hashString "sha256" yarnLockText;
-    hashAlgo = "sha256";
-    toHashFormat = "sri";
-  };
+  yarnLockHash = sri yarnLockText;
   release = {
     version = "4.18.1";
     url = "https://repo.yarnpkg.com/4.18.1/packages/yarnpkg-cli/bin/yarn.js";
     hash = "sha512-suHnUk9lTydJ0ytOvLRiJHPLW8vEhd8gB+EqFU5QFipNeVUmdovF9bj4Fxe/153rJHKBPYb7WuLrVR+pyHKwjw==";
+  };
+  download = {
+    path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
+    url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
+    mirrors = [ ];
+    hash = "sha512-dKlgKLTrnih8yfGKBozBsVcGe0mS1/aKhCGPevK47XUNBMB+L0qk6zFw3YQnOFqH8dWqP9KNw9V+g1oOw4ew2g==";
+    systems = [ "x86_64-linux" ];
+  };
+  # The content of a well-formed lockfile for yarnLockText. The negative
+  # checks change one part of it each.
+  goodLock = {
+    inputsHash = yarnLockHash;
+    yarn = release;
+    downloads = [ download ];
   };
 
   # The repository of the git dependency in fixtures/git, and a stand-in for
@@ -96,7 +142,7 @@ let
     name: change: expected:
     pkgs.runCommand "${name}-check" { nativeBuildInputs = [ pkgs.yarn-berry ]; } ''
       ${yarnWithPlugin}
-      cp -rL ${app.dependencies} served
+      cp -rL ${servedApp} served
       chmod -R u+w served
       ${change}
       export BERRY_PURIFIER_SERVE="$PWD/served"
@@ -113,10 +159,34 @@ let
       fi
       touch $out
     '';
+
+  # The everyday loop of fixtures/app with no network: .yarn/purifier laid
+  # out as `yarn-berry-purifier prefetch` leaves it, from the same
+  # derivations, then `yarn install` and the build script through the
+  # plugin, with no BERRY_PURIFIER_SERVE. `setup` runs in the project
+  # first.
+  offlineLoop =
+    name: setup:
+    pkgs.runCommand name { nativeBuildInputs = [ pkgs.yarn-berry ]; } ''
+      ${yarnWithPlugin}
+      cp -r ${./fixtures/app} project
+      chmod -R u+w project
+      cd project
+      mkdir -p .yarn/purifier
+      ln -s ${servedApp} .yarn/purifier/downloads
+      printf '%s' "$(sha256sum ${./fixtures/app/yarn-berry-purifier.lock.json} | cut -d' ' -f1)" \
+        > .yarn/purifier/downloads.stamp
+      ${setup}
+      yarn install --immutable
+      yarn run build
+      grep -q 'built by the build script (3 is odd: true)' dist/message.js
+      touch $out
+    '';
 in
 {
-  # The package's command prints what its build script wrote, and its dev
-  # dependency stays out of the installed package.
+  # The package's command prints what its build script wrote, its dev
+  # dependency stays out of the installed package, and its release holds
+  # the built file.
   app =
     pkgs.runCommand "app-check"
       {
@@ -128,10 +198,13 @@ in
           echo "the dev dependency is-odd is installed" >&2
           exit 1
         fi
-        tar -xzOf ${app.packages.hello-berry.tarball}/package.tgz package/dist/message.js \
+        tar -xzOf ${app.release}/hello-berry.tgz package/dist/message.js \
           | grep -q 'built by the build script'
         touch $out
       '';
+
+  # The project's `test` script passes in the sandbox.
+  app-tests = app.tests;
 
   # Every dependency source of the sources fixture resolves in the
   # installed package.
@@ -154,8 +227,7 @@ in
   # system.
   platform-filter =
     let
-      lock = {
-        format = 1;
+      lock = sealed {
         inputsHash = yarnLockHash;
         yarn = release;
         downloads = [
@@ -186,28 +258,60 @@ in
         ]
     ) "the downloads for x86_64-linux and aarch64-linux are not the matching esbuild package";
 
-  # A purifier lockfile written for another yarn.lock fails evaluation.
-  stale-lock =
+  # A purifier lockfile written for another yarn.lock fails evaluation,
+  # while the same lockfile reads for its own yarn.lock.
+  conformance-stale = evalCheck "conformance-stale" (
+    !(lockFails (sealed goodLock) yarnLockText) && lockFails (sealed goodLock) "# another yarn.lock\n"
+  ) "a purifier lockfile for another yarn.lock evaluated";
+
+  # A lockfile whose download hash was changed after it was written fails
+  # evaluation, because its contentHash no longer matches.
+  conformance-tampered =
     let
-      result = builtins.tryEval (
-        builtins.deepSeq
-          (readLock "x86_64-linux" {
-            format = 1;
-            inputsHash = yarnLockHash;
-            yarn = release;
-            downloads = [ ];
-          } "# another yarn.lock\n").downloads
-          true
-      );
+      lock = sealed goodLock;
+      tampered = lock // {
+        downloads = [
+          (
+            download
+            // {
+              hash = "sha512-9QAQjTWNDM/Vk2bgBl17yWuZxZNQIF0OUUuPZRKoDtqF2k4EtYbpyiG5/Dk7nqeK6kIJWPYldkOcBqjXjrUlmg==";
+            }
+          )
+        ];
+      };
     in
-    evalCheck "stale-lock" (!result.success) "a purifier lockfile for another yarn.lock evaluated";
+    evalCheck "conformance-tampered" (
+      !(lockFails lock yarnLockText) && lockFails tampered yarnLockText
+    ) "a purifier lockfile with a changed hash evaluated";
+
+  # A request the purifier lockfile has no download for fails the install,
+  # with the command to run.
+  conformance-missing = failedInstall "conformance-missing" ''
+    rm "$(find served -name '*.tgz' | sort | head -1)"
+  '' "is not in the purifier lockfile. Run `yarn-berry-purifier lock`";
+
+  # Malformed purifier lockfiles fail evaluation: one that holds no
+  # object, one of another version, one without its contentHash, one with
+  # a contentHash of other content, one without its inputsHash, and one
+  # with a download entry without a hash.
+  conformance-malformed = evalCheck "conformance-malformed" (
+    !(lockFails (sealed goodLock) yarnLockText)
+    && lockFails [ ] yarnLockText
+    && lockFails (sealed goodLock // { version = 2; }) yarnLockText
+    && lockFails (goodLock // { version = 1; }) yarnLockText
+    && lockFails (sealed goodLock // { contentHash = yarnLockHash; }) yarnLockText
+    && lockFails (sealed (removeAttrs goodLock [ "inputsHash" ])) yarnLockText
+    && lockFails (sealed (
+      goodLock // { downloads = [ (removeAttrs download [ "hash" ]) ]; }
+    )) yarnLockText
+  ) "a malformed purifier lockfile evaluated";
 
   # A lock run of fixtures/app reproduces its committed purifier lockfile
   # byte for byte. The lock run needs the network, so the check is a
   # fixed-output build with an empty output. Nix builds a fixed-output
   # derivation once per name, so the name carries a digest of the plugin
   # and the fixture, and the check runs again when either changes.
-  relock =
+  conformance-relock =
     let
       digest = builtins.hashString "sha256" (
         lib.concatMapStrings builtins.readFile [
@@ -219,7 +323,7 @@ in
         ]
       );
     in
-    pkgs.runCommand "relock-${builtins.substring 0 16 digest}"
+    pkgs.runCommand "conformance-relock-${builtins.substring 0 16 digest}"
       {
         nativeBuildInputs = [
           pkgs.yarn-berry
@@ -243,57 +347,51 @@ in
         touch $out
       '';
 
-  # Malformed purifier lockfiles fail evaluation: one that holds no
-  # object, one without its inputsHash, and one with a download entry
-  # without a hash.
-  malformed-lock =
+  # The installed package of fixtures/app. CI builds it again with
+  # `nix build --rebuild`, which fails when the second build differs.
+  conformance-rebuild = app.packages.hello-berry;
+
+  # After `yarn-berry-purifier prefetch`, the everyday loop of fixtures/app
+  # runs in the sandbox, which has no network.
+  conformance-offline = offlineLoop "conformance-offline" "";
+
+  # The same loop with the purifier lockfile outside the project, as
+  # `yarn-berry-purifier prefetch --lockfile` leaves it.
+  offline-external = offlineLoop "offline-external" ''
+    mv yarn-berry-purifier.lock.json "$TMPDIR/app.lock.json"
+    printf '%s' "$TMPDIR/app.lock.json" > .yarn/purifier/lockfile
+  '';
+
+  # A project whose source holds no purifier lockfile builds from one kept
+  # outside it, as a flake that packages a project it does not change
+  # keeps it.
+  conformance-external =
     let
-      fails =
-        lock:
-        !(builtins.tryEval (builtins.deepSeq (readLock "x86_64-linux" lock yarnLockText).downloads true))
-        .success;
-      entry = {
-        path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
-        url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
-        mirrors = [ ];
-        systems = [ "x86_64-linux" ];
+      project = buildYarnBerryProject {
+        src = builtins.path {
+          name = "app-without-lockfile";
+          path = ./fixtures/app;
+          filter = path: _: baseNameOf path != "yarn-berry-purifier.lock.json";
+        };
+        lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
       };
     in
-    evalCheck "malformed-lock" (
-      fails [ ]
-      && fails {
-        format = 1;
-        yarn = release;
-        downloads = [ ];
-      }
-      && fails {
-        format = 1;
-        inputsHash = yarnLockHash;
-        yarn = release;
-        downloads = [ entry ];
-      }
-    ) "a malformed purifier lockfile evaluated";
+    pkgs.runCommand "conformance-external" { nativeBuildInputs = [ project.packages.hello-berry ]; } ''
+      hello-berry | grep -q 'hello-berry: built by the build script (3 is odd: true)'
+      touch $out
+    '';
 
   # The hash a download entry records is the hash its fetch expects, so a
   # build fails when the file at the URL differs from the recorded one.
   locked-hash =
     let
-      hash = "sha512-dKlgKLTrnih8yfGKBozBsVcGe0mS1/aKhCGPevK47XUNBMB+L0qk6zFw3YQnOFqH8dWqP9KNw9V+g1oOw4ew2g==";
-      fetched =
-        purifier.fetchEntry
-          {
-            inherit pkgs;
-            fetchurl = args: args;
-          }
-          {
-            path = "https/registry.yarnpkg.com/a/-/a-1.0.0.tgz";
-            url = "https://registry.yarnpkg.com/a/-/a-1.0.0.tgz";
-            mirrors = [ ];
-            inherit hash;
-          };
+      fetched = purifier.fetchEntry {
+        inherit pkgs;
+        fetchurl = args: args;
+      } (removeAttrs download [ "systems" ]);
     in
     evalCheck "locked-hash" (
-      fetched.hash == hash
+      fetched.hash == download.hash
     ) "the fetch of a download expects another hash than the locked one";
 
   # The install fails when a served file differs from the locked one: Yarn
@@ -303,26 +401,15 @@ in
     cp "$2" "$1"
   '' "checksum";
 
-  # The install fails with the command to run when a request has no served
-  # file, as when the purifier lockfile lacks a download.
-  missing-entry = failedInstall "missing-entry" ''
-    rm "$(find served -name '*.tgz' | sort | head -1)"
-  '' "is not in yarn-berry-purifier.lock.json. Run `yarn purifier lock`";
-
-  # The plugin evaluates nix/lib/interactive.nix for a project; the
-  # directory it builds is the one the sandboxed build of the project
-  # serves from.
-  interactive =
-    let
-      served = import ../nix/lib/interactive.nix {
-        inherit purifier;
-        pkgs = withOverlay;
-        lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
-      };
-    in
-    evalCheck "interactive" (
-      served.outPath == app.dependencies.outPath
-    ) "the directory interactive use serves from differs from the one the build uses";
+  # The directory interactive use serves from holds every download the
+  # build fetches, at its path. The Yarn release, whose path has no
+  # directory, is fetched for the build's own Yarn and is not served.
+  interactive = pkgs.runCommand "interactive-check" { } ''
+    ${lib.concatMapStrings (f: "test -e ${servedApp}/${lib.escapeShellArg f.path}\n") (
+      builtins.filter (f: f ? url && lib.hasInfix "/" f.path) app.fetches
+    )}
+    touch $out
+  '';
 
   # In the lock run, a nested Yarn records the yarn.lock it resolved for a
   # repository that had none, keyed by the hash of its package.json. The
@@ -373,8 +460,8 @@ in
         touch $out
       '';
 
-  # `yarn purifier publish` builds the tarball nix/lib/publish.nix names,
-  # which is the package's tarball output.
+  # `yarn-berry-purifier publish` builds the tarball nix/lib/publish.nix
+  # names, which is the package's tarball in the release.
   publish-tarball =
     let
       tarball = import ../nix/lib/publish.nix {
@@ -384,13 +471,13 @@ in
         package = "hello-berry";
       };
     in
-    evalCheck "publish-tarball" (
-      tarball.outPath == (buildYarnBerryProject { src = ./fixtures/app; })
-      .packages.hello-berry.tarball.outPath
-    ) "the tarball the publish command builds differs from the package's tarball";
+    pkgs.runCommand "publish-tarball-check" { } ''
+      cmp ${tarball}/package.tgz ${app.release}/hello-berry.tgz
+      touch $out
+    '';
 
-  # `yarn purifier publish` uploads the tarball byte for byte, through
-  # Yarn's own publish request. The registry is a local server.
+  # `yarn-berry-purifier publish` uploads the tarball byte for byte,
+  # through Yarn's own publish request. The registry is a local server.
   publish =
     pkgs.runCommand "publish-check"
       {
@@ -410,9 +497,9 @@ in
         cp -r ${./fixtures/app} project
         chmod -R u+w project
         cd project
-        yarn purifier publish --tarball ${app.packages.hello-berry.tarball}/package.tgz
+        yarn purifier publish --tarball ${app.release}/hello-berry.tgz
         jq -r '._attachments[].data' "$TMPDIR/body" | base64 -d > "$TMPDIR/uploaded.tgz"
-        cmp "$TMPDIR/uploaded.tgz" ${app.packages.hello-berry.tarball}/package.tgz
+        cmp "$TMPDIR/uploaded.tgz" ${app.release}/hello-berry.tgz
         touch $out
       '';
 
@@ -421,8 +508,9 @@ in
   # place of the dependency's URL, so the run needs no network;
   # nix-prefetch-git, which would fetch it, is replaced by a command that
   # prints a hash. The lockfile records the URL Yarn clones and the locked
-  # commit. The check's output holds the yarn.lock and purifier lockfile of
-  # the run, from which fixtures/git was made.
+  # commit, and `--lockfile` writes it outside the project. The check's
+  # output holds the yarn.lock and purifier lockfile of the run, from which
+  # fixtures/git was made.
   git-record =
     pkgs.runCommand "git-record-check"
       {
@@ -449,7 +537,9 @@ in
         export GIT_CONFIG_VALUE_1=https://git.example.invalid/git-dependency.git
         export BERRY_PURIFIER_PREFETCH_GIT=${fakePrefetchGit}
         yarn install --mode=skip-build
-        yarn purifier lock --system x86_64-linux
+        yarn purifier lock --system x86_64-linux --lockfile "$TMPDIR/written.lock.json"
+        test ! -e yarn-berry-purifier.lock.json
+        cp "$TMPDIR/written.lock.json" yarn-berry-purifier.lock.json
         jq -e '.repositories | length == 1' yarn-berry-purifier.lock.json
         jq -e '.repositories[0] | del(.git.commitObject) == {
           path: "git/55e425bf63e80624db0138ef7ff3ff32fe4c7ab5",
@@ -474,13 +564,13 @@ in
   # The build of that project. Yarn clones the dependency in the sandbox
   # from the served repository, through the insteadOf settings of the
   # served directory, and packs it, which runs its prepack script.
-  # `fetchgit` returns the fixture repository in place of a clone of the
-  # dependency's URL.
+  # `fetchers.fetchgit` returns the fixture repository in place of a clone
+  # of the dependency's URL.
   git-build =
     let
       project = buildYarnBerryProject {
         src = ./fixtures/git;
-        fetchgit = _: checkoutOf gitRepository;
+        fetchers.fetchgit = _: checkoutOf gitRepository;
       };
     in
     pkgs.runCommand "git-build-check" { nativeBuildInputs = [ project.packages.uses-git-dependency ]; }
@@ -497,7 +587,7 @@ in
   # each that names its package manager in packageManager and has no
   # lockfile, which gets the lockfile the lock run resolved for it. The
   # lockfiles come from a lock run against the fixture repositories, and
-  # `fetchgit` returns those repositories in place of clones.
+  # `fetchers.fetchgit` returns those repositories in place of clones.
   foreign =
     let
       repositories = {
@@ -508,7 +598,7 @@ in
       };
       project = buildYarnBerryProject {
         src = ./fixtures/foreign;
-        fetchgit = args: checkoutOf repositories.${lib.removeSuffix ".git" (baseNameOf args.url)};
+        fetchers.fetchgit = args: checkoutOf repositories.${lib.removeSuffix ".git" (baseNameOf args.url)};
       };
     in
     pkgs.runCommand "foreign-check"
@@ -531,15 +621,16 @@ in
   # A real-world project, pinned: prettier on Yarn 4.18.1, the release its
   # .yarnrc.yml names, built by its own build script. The purifier
   # lockfile, real-world/prettier.lock.json, is the output of
-  # `yarn purifier lock` for the pinned commit.
+  # `yarn-berry-purifier lock` for the pinned commit, kept outside the
+  # source. builtins.fetchTarball fetches the source at evaluation time, so
+  # the builder reads its package.json files without import from
+  # derivation.
   prettier =
     let
       project = buildYarnBerryProject {
-        src = pkgs.fetchFromGitHub {
-          owner = "prettier";
-          repo = "prettier";
-          rev = "bed4edbb1cf2a9db4004215b0ce5707cdb02b5d9";
-          hash = "sha256-Gm9jbi8E8AX2366olEPodeBwCJ42RRGnhKr4Wl9u2UM=";
+        src = builtins.fetchTarball {
+          url = "https://github.com/prettier/prettier/archive/bed4edbb1cf2a9db4004215b0ce5707cdb02b5d9.tar.gz";
+          sha256 = "sha256-Gm9jbi8E8AX2366olEPodeBwCJ42RRGnhKr4Wl9u2UM=";
         };
         lockFile = ./real-world/prettier.lock.json;
       };
@@ -550,6 +641,7 @@ in
       touch $out
     '';
 
-  # The wrapper builds.
+  # The wrapper and the command build.
   yarn = withOverlay.yarn-berry-purifier.yarn;
+  yarn-berry-purifier = withOverlay.yarn-berry-purifier.yarn-berry-purifier;
 }

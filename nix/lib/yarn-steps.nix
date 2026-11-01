@@ -3,7 +3,6 @@
 # The shell steps that run a Yarn Berry project offline in the sandbox.
 {
   lib,
-  fetchurl,
   runtimeShell,
   # The Node.js that runs Yarn.
   node,
@@ -11,19 +10,10 @@
   plugin,
   # The directory nix/lib/served.nix lays out.
   dependencies,
-  # The Yarn release, as nix/lib/lock.nix returns it.
-  yarnRelease,
+  # The Yarn release that runs the install: a path relative to the project
+  # root for a release in the project, or the fetched release.
+  yarnJs,
 }:
-let
-  yarnJs =
-    if yarnRelease ? path then
-      "./${yarnRelease.path}"
-    else
-      fetchurl {
-        inherit (yarnRelease) url hash;
-        name = "yarn-${yarnRelease.version}.js";
-      };
-in
 {
   # Gives Yarn a home directory whose .yarnrc.yml loads the plugin, points
   # the plugin at the downloads, and defines `yarn` as the locked release.

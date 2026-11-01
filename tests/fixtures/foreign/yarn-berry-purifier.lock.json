@@ -1,5 +1,6 @@
 {
-  "format": 1,
+  "version": 1,
+  "contentHash": "sha256-FFeSNM0U/VNmtvox34MVI2BzRVTLxC7V5dPXyzQ6wdA=",
   "inputsHash": "sha256-vLq2/U02lFeQu4+oRVnF9oI8l+URA0o47nlX3ALUICs=",
   "yarn": {
     "version": "4.18.1",
@@ -96,7 +97,10 @@
         "rev": "217d62eabd23685a4e8b15685e53b5659611bfd1",
         "submodules": false,
         "leaveDotGit": true,
-        "commitObject": { "object": "dHJlZSAzOGY3N2E2ZjQxMTA3YjFmYjllOWQyODhjMmM0MzE0M2RiZDMwNWNkCmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK", "gitlinks": [] }
+        "commitObject": {
+          "object": "dHJlZSAzOGY3N2E2ZjQxMTA3YjFmYjllOWQyODhjMmM0MzE0M2RiZDMwNWNkCmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK",
+          "gitlinks": []
+        }
       },
       "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "remote": "https://git.example.invalid/classic-lockless-dependency.git"
@@ -108,7 +112,10 @@
         "rev": "62db8b87e7e0dd57c8e2f01ccb226470e4a8eb20",
         "submodules": false,
         "leaveDotGit": true,
-        "commitObject": { "object": "dHJlZSA3NmY2NzljYjFkYjg5ODA0NTNlYzBiOTI4NGQzZDYxYWRhZGE1NTQwCmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK", "gitlinks": [] }
+        "commitObject": {
+          "object": "dHJlZSA3NmY2NzljYjFkYjg5ODA0NTNlYzBiOTI4NGQzZDYxYWRhZGE1NTQwCmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK",
+          "gitlinks": []
+        }
       },
       "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "remote": "https://git.example.invalid/classic-dependency.git"
@@ -120,7 +127,10 @@
         "rev": "6a79737227132cc161eb123439f55d6d55f1a16a",
         "submodules": false,
         "leaveDotGit": true,
-        "commitObject": { "object": "dHJlZSBlOTgxNmUyY2E3NDk5NWQ4MTQxODkxODJmNjM3OTRhMzZiYWU1N2Q2CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK", "gitlinks": [] }
+        "commitObject": {
+          "object": "dHJlZSBlOTgxNmUyY2E3NDk5NWQ4MTQxODkxODJmNjM3OTRhMzZiYWU1N2Q2CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK",
+          "gitlinks": []
+        }
       },
       "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "remote": "https://git.example.invalid/npm-lockless-dependency.git"
@@ -132,7 +142,10 @@
         "rev": "8b938fbbbbf11f649e6d0b698281934704c56a69",
         "submodules": false,
         "leaveDotGit": true,
-        "commitObject": { "object": "dHJlZSA4MWU4YmMxMDUzMDZiY2QzYzczYTdlYzlhMWJmODFlODFlYTY3ODA2CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK", "gitlinks": [] }
+        "commitObject": {
+          "object": "dHJlZSA4MWU4YmMxMDUzMDZiY2QzYzczYTdlYzlhMWJmODFlODFlYTY3ODA2CmF1dGhvciBmaXh0dXJlIDxmaXh0dXJlQGV4YW1wbGUuaW52YWxpZD4gMSArMDAwMApjb21taXR0ZXIgZml4dHVyZSA8Zml4dHVyZUBleGFtcGxlLmludmFsaWQ+IDEgKzAwMDAKCmZpeHR1cmUK",
+          "gitlinks": []
+        }
       },
       "hash": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "remote": "https://git.example.invalid/npm-dependency.git"
