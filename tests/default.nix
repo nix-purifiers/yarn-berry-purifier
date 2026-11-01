@@ -61,20 +61,25 @@ let
     in
     withVersion // { contentHash = sri (builtins.toJSON withVersion); };
 
-  # Reads a purifier lockfile written inline, for a yarn.lock with the
-  # given text.
+  # The lock in memory of fixtures/app with a purifier lockfile written
+  # inline, for a yarn.lock with the given text.
   readLock =
-    system: lock: yarnLock:
-    import ../nix/lib/lock.nix {
-      inherit lib system;
+    lock: yarnLock:
+    yarn-berry-purifier.readLock {
+      src = ./fixtures/app;
       lockFile = builtins.toFile "yarn-berry-purifier.lock.json" (builtins.toJSON lock);
       yarnLock = builtins.toFile "yarn.lock" yarnLock;
     };
-  # Whether reading the lockfile fails evaluation.
-  lockFails =
-    lock: yarnLock:
-    !(builtins.tryEval (builtins.deepSeq (readLock "x86_64-linux" lock yarnLock).downloads true))
-    .success;
+  # Whether readLock reports the lockfile as usable.
+  usable = lock: yarnLock: (readLock lock yarnLock).problems == [ ];
+  # Whether readLock reports problems with the lockfile, each naming the
+  # command that fixes it, and gives no entries.
+  reported =
+    read:
+    read.problems != [ ]
+    && builtins.all (lib.hasInfix "Run `yarn-berry-purifier lock`") read.problems
+    && read.entries == [ ];
+  rejected = lock: yarnLock: reported (readLock lock yarnLock);
   yarnLockText = "# a yarn.lock\n";
   yarnLockHash = sri yarnLockText;
   release = {
@@ -244,7 +249,11 @@ in
           }
         ];
       };
-      urls = system: map (d: d.url) (readLock system lock yarnLockText).downloads;
+      urls =
+        system:
+        map (d: d.url) (
+          builtins.filter (d: d ? systems) (purifier.entriesFor system (readLock lock yarnLockText))
+        );
     in
     evalCheck "platform-filter" (
       urls "x86_64-linux"
@@ -258,7 +267,7 @@ in
   # A purifier lockfile written for another yarn.lock fails evaluation,
   # while the same lockfile reads for its own yarn.lock.
   conformance-stale = evalCheck "conformance-stale" (
-    !(lockFails (sealed goodLock) yarnLockText) && lockFails (sealed goodLock) "# another yarn.lock\n"
+    usable (sealed goodLock) yarnLockText && rejected (sealed goodLock) "# another yarn.lock\n"
   ) "a purifier lockfile for another yarn.lock evaluated";
 
   # A lockfile whose download hash was changed after it was written fails
@@ -278,27 +287,62 @@ in
       };
     in
     evalCheck "conformance-tampered" (
-      !(lockFails lock yarnLockText) && lockFails tampered yarnLockText
+      usable lock yarnLockText && rejected tampered yarnLockText
     ) "a purifier lockfile with a changed hash evaluated";
 
-  # A request the purifier lockfile has no download for fails the install,
-  # with the command to run.
-  conformance-missing = failedInstall "conformance-missing" ''
-    rm "$(find served -name '*.tgz' | sort | head -1)"
-  '' "is not in the purifier lockfile. Run `yarn-berry-purifier lock`";
+  # A project without its purifier lockfile is reported by readLock, and a
+  # request the purifier lockfile has no download for fails the install;
+  # both name the command to run. The yarn.lock of Yarn Berry, which names
+  # the packages, is YAML, which Nix does not read, so a missing download
+  # shows only when Yarn requests it.
+  conformance-missing =
+    if
+      reported (
+        yarn-berry-purifier.readLock {
+          src = ./fixtures/app;
+          lockFile = ./fixtures/app/missing.lock.json;
+        }
+      )
+    then
+      failedInstall "conformance-missing" ''
+        rm "$(find served -name '*.tgz' | sort | head -1)"
+      '' "is not in the purifier lockfile. Run `yarn-berry-purifier lock`"
+    else
+      throw "yarn-berry-purifier check conformance-missing: readLock reported no problem for a missing purifier lockfile";
+
+  # readLock gives the lock in memory of the purifier contract, which the
+  # purifier library's checkLock accepts: the project's packages as
+  # outputs, and downloads that keep the systems that fetch them.
+  read-lock =
+    let
+      lock = purifier.checkLock (yarn-berry-purifier.readLock { src = ./fixtures/app; });
+    in
+    evalCheck "read-lock" (
+      lock.purifier == "yarn-berry-purifier"
+      &&
+        lock.outputs == {
+          hello-berry = {
+            version = "1.0.0";
+            dir = "";
+            bin.hello-berry = "bin/hello.js";
+          };
+        }
+      && builtins.any (e: e ? systems) lock.entries
+      && lock.problems == [ ]
+    ) "readLock of fixtures/app gave another lock";
 
   # Malformed purifier lockfiles fail evaluation: one that holds no
   # object, one of another version, one without its contentHash, one with
   # a contentHash of other content, one without its inputsHash, and one
   # with a download entry without a hash.
   conformance-malformed = evalCheck "conformance-malformed" (
-    !(lockFails (sealed goodLock) yarnLockText)
-    && lockFails [ ] yarnLockText
-    && lockFails (sealed goodLock // { version = 2; }) yarnLockText
-    && lockFails (goodLock // { version = 1; }) yarnLockText
-    && lockFails (sealed goodLock // { contentHash = yarnLockHash; }) yarnLockText
-    && lockFails (sealed (removeAttrs goodLock [ "inputsHash" ])) yarnLockText
-    && lockFails (sealed (
+    usable (sealed goodLock) yarnLockText
+    && rejected [ ] yarnLockText
+    && rejected (sealed goodLock // { version = 2; }) yarnLockText
+    && rejected (goodLock // { version = 1; }) yarnLockText
+    && rejected (sealed goodLock // { contentHash = yarnLockHash; }) yarnLockText
+    && rejected (sealed (removeAttrs goodLock [ "inputsHash" ])) yarnLockText
+    && rejected (sealed (
       goodLock // { downloads = [ (removeAttrs download [ "hash" ]) ]; }
     )) yarnLockText
   ) "a malformed purifier lockfile evaluated";

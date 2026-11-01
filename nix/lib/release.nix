@@ -15,10 +15,13 @@
   yarnLock,
 }:
 let
-  lock = import ./lock.nix {
-    inherit (pkgs) lib;
+  inherit (pkgs) lib;
+  read = import ./read-lock.nix { inherit lib; } {
+    src = dirOf yarnLock;
     inherit lockFile yarnLock;
-    inherit (pkgs.stdenv.hostPlatform) system;
   };
+  lock = builtins.seq (purifier.checkLock read) (
+    import ./lock.nix { inherit lib lockFile yarnLock; }
+  );
 in
 purifier.fetchEntry { inherit pkgs; } lock.release

@@ -84,10 +84,26 @@
 let
   inherit (pkgs) lib stdenv;
 
-  lock = import ./lock.nix {
-    inherit lib lockFile yarnLock;
-    inherit (stdenv.hostPlatform) system;
-  };
+  inherit (stdenv.hostPlatform) system;
+
+  # The lock in memory of the purifier contract, which checkLock fails
+  # evaluation on when the lockfiles cannot be used.
+  read = import ./read-lock.nix { inherit lib; } { inherit src yarnLock lockFile; };
+  checked = purifier.checkLock read;
+  # The rest of the purifier lockfile, read only after the check.
+  lock = builtins.seq checked (import ./lock.nix { inherit lib lockFile yarnLock; });
+
+  # The entries this system fetches. A lockfile whose lock runs left out
+  # this system has downloads, but none for it.
+  entries =
+    let
+      forSystem = purifier.entriesFor system read;
+      hasDownloads = builtins.any (e: e ? systems);
+    in
+    if hasDownloads checked.entries && !(hasDownloads forSystem) then
+      throw "yarn-berry-purifier: ${toString lockFile} covers no download for ${system}. Run `yarn-berry-purifier lock --system ${system}`."
+    else
+      forSystem;
 
   fetchArgs = fetchers // {
     inherit pkgs;
@@ -152,13 +168,8 @@ let
   };
 
   dependencies = pkgs.callPackage ./served.nix {
-    inherit purifier fetchers;
-    inherit (lock)
-      downloads
-      npmLocks
-      externals
-      repositories
-      ;
+    inherit purifier fetchers entries;
+    inherit (lock) npmLocks externals;
   };
 
   plugin = pkgs.yarn-berry-purifier.plugin or (pkgs.callPackage ../../pkgs/plugin { });
@@ -402,5 +413,5 @@ in
 {
   packages = lib.mapAttrs (_: mkPackage) ownPackageSet;
   inherit tests release;
-  fetches = lock.downloads ++ lock.repositories ++ lib.optional (lock.release != null) lock.release;
+  fetches = checked.entries;
 }

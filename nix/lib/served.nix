@@ -28,12 +28,12 @@
   git,
   # The `purifier` namespace of the shared library.
   purifier,
-  # The downloads, as nix/lib/lock.nix returns them.
-  downloads,
+  # The entries of the lock that the build's system fetches, as the purifier
+  # library's entriesFor returns them: the downloads, the git repositories
+  # Yarn clones and the Yarn release.
+  entries,
   # The external yarn.lock files, as nix/lib/lock.nix returns them.
   externals,
-  # The git repositories, as nix/lib/lock.nix returns them.
-  repositories ? [ ],
   # The resolved package-lock.json files, as nix/lib/lock.nix returns them.
   npmLocks ? [ ],
   # Replaces fetchers of the purifier library; its fetchEntry and tree take
@@ -49,11 +49,11 @@ let
     fetchArgs
     // {
       name = "yarn-berry-purifier-dependencies";
-      entries = downloads ++ repositories;
+      inherit entries;
     }
   );
 
-  byRemote = lib.groupBy (r: r.remote) repositories;
+  byRemote = lib.groupBy (r: r.remote) (builtins.filter (e: e ? git && e ? remote) entries);
   remoteKey = remote: builtins.hashString "sha256" remote;
 
   # A repository with every locked commit of one remote, each on its own

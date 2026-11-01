@@ -54,6 +54,16 @@ the package set to build with:
   build fetches on its system, for tools that read a software bill of
   materials, licenses or vulnerabilities.
 
+`lib.yarn-berry-purifier.readLock { src, lockFile, yarnLock }` reads the
+lockfiles into the lock in memory of the purifier contract, the shape that
+every purifier gives. Its `entries` are the purifier library's download
+entries, each download with the `systems` whose lock runs fetched it; its
+`outputs` are the project's packages by name, with their version,
+directory and commands; and its `problems` list why the lockfiles cannot be
+used, each naming the command that fixes it. A tool that reads every
+purifier, such as a generator of software bills of materials, calls it,
+and the builder checks it with the purifier library's `checkLock`.
+
 `nix/lib/build-yarn-berry-project.nix` documents the arguments. Besides
 `pkgs` and `src`, they include `fetchers` (replaces fetchers of the
 purifier library, such as `fetchurl` for a company mirror or credentials),

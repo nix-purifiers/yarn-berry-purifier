@@ -16,18 +16,15 @@
   yarnLock,
 }:
 let
-  lock = import ./lock.nix {
-    inherit (pkgs) lib;
+  inherit (pkgs) lib;
+  read = import ./read-lock.nix { inherit lib; } {
+    src = dirOf yarnLock;
     inherit lockFile yarnLock;
-    inherit (pkgs.stdenv.hostPlatform) system;
   };
+  entries = purifier.entriesFor pkgs.stdenv.hostPlatform.system read;
+  lock = builtins.seq entries (import ./lock.nix { inherit lib lockFile yarnLock; });
 in
 pkgs.callPackage ./served.nix {
-  inherit purifier;
-  inherit (lock)
-    downloads
-    npmLocks
-    externals
-    repositories
-    ;
+  inherit purifier entries;
+  inherit (lock) npmLocks externals;
 }
