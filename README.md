@@ -16,11 +16,33 @@ nix run 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
 
 We recommend committing `yarn-berry-purifier.lock.json` and `yarn.lock` to
 the project's repository, where the builder and the commands look for them
-by default. Then build the project from a flake. The overlay
+by default. Then build from the project's directory, without adding a
+Nix file. The overlay
 `overlays.default` adds one attribute to the package set: the scope
 `yarn-berry-purifier`, made with `lib.makeScope`. The scope holds the
 builder `buildYarnBerryProject`, the command `yarn-berry-purifier`, the
-`yarn` wrapper and the plugin:
+`yarn` wrapper and the plugin. Replace `my-app` with the package to build:
+
+```zsh
+nix build --impure --expr '
+  let
+    purifier = builtins.getFlake "github:nix-purifiers/yarn-berry-purifier";
+    pkgs = import purifier.inputs.nixpkgs {
+      system = builtins.currentSystem;
+      overlays = [ purifier.overlays.default ];
+    };
+  in
+  (pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app'
+```
+
+This uses the purifier's pinned nixpkgs, matching the lock command above.
+To build with ambient `<nixpkgs>` from your Nix search path instead,
+replace `import purifier.inputs.nixpkgs` with `import <nixpkgs>`.
+Both forms need no Nix files in your project. The build tool and language
+versions must match the lockfile; with ambient nixpkgs, lock with the
+purifier from that package set or pass a compatible toolchain to the builder.
+
+A flake is optional and can live in the project or in another repository:
 
 ```nix
 {
@@ -41,22 +63,6 @@ builder `buildYarnBerryProject`, the command `yarn-berry-purifier`, the
       checks.${system}.tests = project.tests;
     };
 }
-```
-
-A package in an overlay of the flake takes the scope by name, like any
-other package:
-
-```nix
-# package.nix
-{ yarn-berry-purifier }:
-(yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app
-```
-
-```nix
-overlays = [
-  yarn-berry-purifier.overlays.default
-  (final: prev: { my-app = final.callPackage ./package.nix { }; })
-];
 ```
 
 `yarn-berry-purifier.overrideScope` replaces what everything in the scope
