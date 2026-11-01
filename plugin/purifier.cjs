@@ -20,9 +20,10 @@
 //                                      (interactive use)
 //
 // A file lies in the directory at urlPath(url). The plugin also adds the
-// `yarn purifier lock`, `yarn purifier prefetch` and `yarn purifier
-// publish` commands, which the `yarn-berry-purifier` command runs as
-// `yarn-berry-purifier lock`, `prefetch` and `publish`.
+// `yarn purifier lock`, `yarn purifier update`, `yarn purifier prefetch`
+// and `yarn purifier publish` commands, which the `yarn-berry-purifier`
+// command runs as `yarn-berry-purifier lock`, `update`, `prefetch` and
+// `publish`.
 
 const crypto = require("crypto");
 const fs = require("fs");
@@ -506,6 +507,47 @@ module.exports = {
       }
     }
 
+    // `yarn purifier update [<package>...]` updates both lockfiles in one
+    // run: `yarn up -R` resolves the named packages again, or every package
+    // when none is named, to the newest versions their ranges in the
+    // manifests allow, and rewrites yarn.lock without touching the
+    // manifests; then `yarn purifier lock` relocks the purifier lockfile
+    // against the result. Both run with the plugin's serving turned off,
+    // because the new versions are not locked yet.
+    class UpdateCommand extends BaseCommand {
+      static paths = [["purifier", "update"]];
+
+      packages = Option.Rest();
+
+      lockfile = Option.String("--lockfile", {
+        description: `Write the purifier lockfile at this path instead of ${LOCK_FILE} at the project root`,
+      });
+
+      systems = Option.Array("--system", {
+        description: "A Nix system to lock for; the default is every system yarn-berry-purifier knows",
+      });
+
+      async execute() {
+        const run = (args) => {
+          const result = childProcess.spawnSync(process.execPath, [process.argv[1], ...args], {
+            cwd: this.context.cwd,
+            stdio: ["ignore", "inherit", "inherit"],
+            env: { ...process.env, BERRY_PURIFIER: "0" },
+          });
+          if (result.status !== 0) throw new Error(`yarn-berry-purifier: yarn ${args.join(" ")} failed`);
+        };
+        const patterns = this.packages.length > 0 ? this.packages : ["*"];
+        run(["up", "--recursive", ...patterns]);
+        run([
+          "purifier",
+          "lock",
+          ...(this.lockfile ? ["--lockfile", path.resolve(this.context.cwd, this.lockfile)] : []),
+          ...(this.systems || []).flatMap((system) => ["--system", system]),
+        ]);
+        return 0;
+      }
+    }
+
     // `yarn purifier prefetch` realizes in the Nix store what the everyday
     // loop needs from the purifier lockfile for the current system, and
     // keeps it alive with garbage-collector roots under .yarn/purifier: the
@@ -725,7 +767,7 @@ module.exports = {
 
     return {
       hooks: { wrapNetworkRequest, setupScriptEnvironment, afterAllInstalled },
-      commands: [LockCommand, PrefetchCommand, PublishCommand],
+      commands: [LockCommand, UpdateCommand, PrefetchCommand, PublishCommand],
     };
   },
 };

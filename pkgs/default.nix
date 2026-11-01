@@ -9,6 +9,6 @@ in
   inherit plugin;
   # Yarn Berry with the plugin loaded.
   inherit yarn;
-  # The `yarn-berry-purifier` command: lock, prefetch and publish.
+  # The `yarn-berry-purifier` command: lock, update, prefetch and publish.
   yarn-berry-purifier = callPackage ./yarn-berry-purifier { inherit yarn; };
 }

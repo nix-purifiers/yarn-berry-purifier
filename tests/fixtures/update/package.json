@@ -1,0 +1,8 @@
+{
+  "name": "update-berry",
+  "version": "1.0.0",
+  "dependencies": {
+    "kleur": "^4.0.0"
+  },
+  "packageManager": "yarn@4.18.1"
+}

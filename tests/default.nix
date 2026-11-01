@@ -388,6 +388,63 @@ in
         touch $out
       '';
 
+  # `yarn-berry-purifier update` moves kleur, which fixtures/update locks
+  # at 4.0.0 within ^4.0.0, to a newer version in yarn.lock, and relocks
+  # the purifier lockfile, so that readLock reports no problem with the
+  # two. The update needs the network, so the check is a fixed-output
+  # build with an empty output, whose name carries a digest of the plugin,
+  # the lockfile reader and the fixture.
+  conformance-update =
+    let
+      digest = builtins.hashString "sha256" (
+        lib.concatMapStrings builtins.readFile [
+          ../plugin/purifier.cjs
+          ../nix/lib/lock.nix
+          ../nix/lib/read-lock.nix
+          ./fixtures/update/package.json
+          ./fixtures/update/yarn.lock
+          ./fixtures/update/yarn-berry-purifier.lock.json
+        ]
+      );
+    in
+    pkgs.runCommand "conformance-update-${builtins.substring 0 16 digest}"
+      {
+        nativeBuildInputs = [
+          withOverlay.yarn-berry-purifier.yarn-berry-purifier
+          pkgs.nix
+          pkgs.cacert
+        ];
+        outputHashMode = "flat";
+        outputHashAlgo = "sha256";
+        outputHash = builtins.hashString "sha256" "";
+      }
+      ''
+        export HOME="$TMPDIR/home"
+        mkdir -p "$HOME"
+        export NODE_EXTRA_CA_CERTS=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+        export YARN_ENABLE_TELEMETRY=0
+        export NIX_CONFIG=$'experimental-features = nix-command\nstore = dummy://'
+        cp -r ${./fixtures/update} project
+        chmod -R u+w project
+        cd project
+        yarn-berry-purifier update --system x86_64-linux
+        if grep -q '"kleur@npm:4.0.0"' yarn.lock; then
+          echo "the update left kleur at 4.0.0" >&2
+          exit 1
+        fi
+        grep -q '"\^4.0.0"' package.json
+        problems="$(nix eval --impure --json --expr '
+          (import ${../nix/lib}/read-lock.nix { lib = import ${pkgs.path}/lib; } {
+            src = /. + builtins.getEnv "PWD";
+          }).problems
+        ')"
+        if [ "$problems" != "[]" ]; then
+          echo "the updated lockfiles have problems: $problems" >&2
+          exit 1
+        fi
+        touch $out
+      '';
+
   # The installed package of fixtures/app. CI builds it again with
   # `nix build --rebuild`, which fails when the second build differs.
   conformance-rebuild = app.packages.hello-berry;

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 #
-# The `yarn-berry-purifier` command: `lock`, `prefetch` and `publish`, which
-# run the plugin's commands `yarn purifier lock`, `yarn purifier prefetch`
-# and `yarn purifier publish` through the `yarn` wrapper, with the
+# The `yarn-berry-purifier` command: `lock`, `update`, `prefetch` and
+# `publish`, which run the plugin's commands `yarn purifier lock`, `update`,
+# `prefetch` and `publish` through the `yarn` wrapper, with the
 # remaining arguments passed on.
 {
   writeShellApplication,
@@ -13,14 +13,14 @@ writeShellApplication {
   runtimeInputs = [ yarn ];
   text = ''
     usage() {
-      echo "usage: yarn-berry-purifier lock|prefetch|publish [--lockfile <path>] [options]" >&2
+      echo "usage: yarn-berry-purifier lock|update|prefetch|publish [--lockfile <path>] [options]" >&2
       exit 2
     }
     [ "$#" -ge 1 ] || usage
     command="$1"
     shift
     case "$command" in
-      lock | prefetch | publish)
+      lock | update | prefetch | publish)
         exec yarn purifier "$command" "$@"
         ;;
       *)

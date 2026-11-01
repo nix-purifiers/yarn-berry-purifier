@@ -101,6 +101,18 @@ BERRY_PURIFIER=0 yarn add left-pad
 yarn-berry-purifier lock
 ```
 
+`yarn-berry-purifier lock` keeps Yarn's resolution as `yarn.lock` holds
+it. `yarn-berry-purifier update` updates both lockfiles in one run: it runs
+`yarn up --recursive` for the packages it names, or for every package when
+it names none, which resolves them again to the newest versions their
+ranges in `package.json` allow and leaves the ranges as they are, and then
+relocks the purifier lockfile against the new `yarn.lock`. It takes
+`--lockfile` and `--system` as `lock` does.
+
+```zsh
+yarn-berry-purifier update kleur
+```
+
 The lock run copies the project into `.yarn/purifier/lock-run` and
 installs it there once for each Nix system it covers, which are
 x86_64-linux, aarch64-linux, x86_64-darwin and aarch64-darwin by default,
@@ -163,6 +175,11 @@ Every error names the command that fixes it.
   "covers no download for" that system. Run
   `yarn-berry-purifier lock --system <system>`, or `yarn-berry-purifier lock`
   for every system.
+- `yarn-berry-purifier update` stops with "yarn up --recursive ... failed"
+  when Yarn cannot resolve the packages, such as for a name no dependency
+  matches; Yarn's own message above it says why, and both lockfiles stay as
+  they were. When the relock after it fails, `yarn.lock` already holds the
+  new resolution; run `yarn-berry-purifier lock` once the cause is fixed.
 - A file whose content differs from the locked hash fails its fixed-output
   fetch in Nix, and Yarn's own checksum check fails an install from a
   changed file.
