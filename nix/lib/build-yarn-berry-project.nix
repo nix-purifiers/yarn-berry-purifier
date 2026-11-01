@@ -38,6 +38,7 @@
   nodejs,
   python3,
   node-gyp,
+  autoPatchelfHook,
   pkgs,
 }:
 {
@@ -50,6 +51,15 @@
   # The Node.js that runs Yarn and the project's scripts, and that the
   # packages' commands run on.
   node ? nodejs,
+  # The workspaces to build, by package name, in the order their scripts
+  # run, or null for every package of the project. When it is a list, the
+  # install covers only these workspaces and their dependencies
+  # (`yarn workspaces focus`), each build script runs in each of them that
+  # defines it, and `packages` holds only them. A workspace whose
+  # dependencies cannot install offline, such as a documentation site
+  # whose sharp downloads libvips in its install script, stays out of the
+  # build this way.
+  workspaces ? null,
   # The package scripts that build the project, run in order before the
   # packages are packed. A script the root package defines runs at the
   # root; otherwise it runs in each workspace that defines it.
@@ -57,9 +67,11 @@
   # Runs the `test` script the same way, after the build scripts.
   doCheck ? false,
   # Tools the build scripts and the dependencies' install scripts need.
-  # Python and node-gyp are there for native addons.
+  # Python and node-gyp are there for native addons; setuptools gives the
+  # older node-gyp releases that packages bundle the distutils module,
+  # which Python 3.12 removed.
   nativeBuildInputs ? [
-    python3
+    (python3.withPackages (ps: [ ps.setuptools ]))
     node-gyp
   ],
   # Libraries native addons link against.
@@ -80,8 +92,35 @@ let
     inherit (stdenv.hostPlatform) system;
   };
 
-  ownPackageSet = import ./workspaces.nix { inherit lib src; };
-  ownPackages = builtins.attrValues ownPackageSet;
+  allPackages = import ./workspaces.nix { inherit lib src; };
+  ownPackageSet =
+    if workspaces == null then
+      allPackages
+    else
+      lib.genAttrs workspaces (
+        name:
+        allPackages.${name}
+          or (throw "yarn-berry-purifier: the project has no workspace named ${name}; its packages are ${lib.concatStringsSep ", " (builtins.attrNames allPackages)}.")
+      );
+  ownPackages =
+    if workspaces == null then
+      builtins.attrValues ownPackageSet
+    else
+      map (name: ownPackageSet.${name}) workspaces;
+
+  # The install of every package, or of the listed workspaces, with or
+  # without their development dependencies.
+  install =
+    production:
+    let
+      targets = if workspaces == null then "--all" else lib.escapeShellArgs workspaces;
+    in
+    if production then
+      "yarn workspaces focus --production ${targets}"
+    else if workspaces == null then
+      "yarn install --immutable"
+    else
+      "yarn workspaces focus ${targets}";
 
   defaultSrcFilter =
     path: type:
@@ -139,14 +178,40 @@ let
     yarnRelease = lock.yarn;
   };
 
+  # Prebuilt Linux binaries in packages, such as turbo's, get their dynamic
+  # loader and libraries from the store, and scripts get their
+  # interpreters patched, because the sandbox has no /usr/bin/env. An
+  # install with --mode=skip-build lays the packages out without running
+  # their build scripts; the files are patched in node_modules and
+  # .yarn/unplugged, and a second install runs the build scripts.
+  binaryPatching = lib.optionals stdenv.hostPlatform.isLinux [ autoPatchelfHook ];
+  binaryLibraries = lib.optionals stdenv.hostPlatform.isLinux [ stdenv.cc.cc.lib ];
+  patchInstalled = ''
+    patchInstalled() {
+      local dirs=()
+      while IFS= read -r -d "" dir; do
+        dirs+=("$dir")
+      done < <(find . \( -name node_modules -o -path ./.yarn/unplugged \) -type d -prune -print0)
+      if [ ''${#dirs[@]} -gt 0 ]; then
+        patchShebangs "''${dirs[@]}" > /dev/null
+        if declare -F autoPatchelf > /dev/null; then
+          autoPatchelf "''${dirs[@]}"
+        fi
+      fi
+    }
+  '';
+
   # The file name of a package's tarball in `build`.
   tarballName = p: (builtins.replaceStrings [ "@" "/" ] [ "" "__" ] p.name) + ".tgz";
 
-  # Runs package script $1 at the root when the root defines it, and in
-  # every workspace that defines it otherwise.
+  # Runs package script $1 at the root when the root defines it and no
+  # workspaces are listed, and in every workspace that defines it
+  # otherwise.
   runScript = ''
     runScript() {
-      if node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$1"; then
+      if ${
+        if workspaces == null then "true" else "false"
+      } && node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$1"; then
         yarn run "$1"
       else
         ${lib.concatMapStrings (p: ''
@@ -166,13 +231,18 @@ let
       node
       pkgs.git
     ]
-    ++ nativeBuildInputs;
-    inherit buildInputs;
+    ++ nativeBuildInputs
+    ++ binaryPatching;
+    buildInputs = buildInputs ++ binaryLibraries;
+    autoPatchelfIgnoreMissingDeps = [ "*" ];
     dontConfigure = true;
     buildPhase = ''
       runHook preBuild
       ${steps.setup}
-      yarn install --immutable
+      ${patchInstalled}
+      YARN_ENABLE_SCRIPTS=0 ${install false}
+      patchInstalled
+      ${install false}
       ${runScript}
       for script in ${lib.escapeShellArgs buildScripts}; do
         runScript "$script"
@@ -203,8 +273,10 @@ let
       node
       pkgs.git
     ]
-    ++ nativeBuildInputs;
-    inherit buildInputs;
+    ++ nativeBuildInputs
+    ++ binaryPatching;
+    buildInputs = buildInputs ++ binaryLibraries;
+    autoPatchelfIgnoreMissingDeps = [ "*" ];
     dontConfigure = true;
     # The installed packages lay their dependencies out in node_modules,
     # where Node.js finds them without Yarn's Plug'n'Play loader, so this
@@ -212,8 +284,11 @@ let
     buildPhase = ''
       runHook preBuild
       ${steps.setup}
+      ${patchInstalled}
       export YARN_NODE_LINKER=node-modules
-      yarn workspaces focus --all --production
+      YARN_ENABLE_SCRIPTS=0 ${install true}
+      patchInstalled
+      ${install true}
       # A `link:` or `portal:` dependency is a symlink into the project,
       # which the installed packages do not contain, so it becomes a copy of
       # its target.
