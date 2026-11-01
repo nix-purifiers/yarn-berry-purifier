@@ -15,8 +15,9 @@ nix run 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
 ```
 
 Commit `yarn-berry-purifier.lock.json` with `yarn.lock`. Then build the
-project from a flake. The flake's library holds the builder, which takes
-the package set to build with:
+project from a flake. The overlay `overlays.default` adds the builder
+`buildYarnBerryProject` to the package set, where nixpkgs keeps its own
+builders:
 
 ```nix
 {
@@ -26,11 +27,11 @@ the package set to build with:
   outputs = { nixpkgs, yarn-berry-purifier, ... }:
     let
       system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      project = yarn-berry-purifier.lib.yarn-berry-purifier.buildYarnBerryProject {
-        inherit pkgs;
-        src = ./.;
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ yarn-berry-purifier.overlays.default ];
       };
+      project = pkgs.buildYarnBerryProject { src = ./.; };
     in
     {
       packages.${system}.my-app = project.packages.my-app;
@@ -38,6 +39,25 @@ the package set to build with:
     };
 }
 ```
+
+A package in an overlay of the flake takes the builder by name, like any
+other builder:
+
+```nix
+# package.nix
+{ buildYarnBerryProject }:
+(buildYarnBerryProject { src = ./.; }).packages.my-app
+```
+
+```nix
+overlays = [
+  yarn-berry-purifier.overlays.default
+  (final: prev: { my-app = final.callPackage ./package.nix { }; })
+];
+```
+
+`buildYarnBerryProject.override` replaces the packages that the builder
+takes from the package set, such as `nodejs`.
 
 `buildYarnBerryProject` returns these attributes:
 
@@ -65,9 +85,9 @@ purifier, such as a generator of software bills of materials, calls it,
 and the builder checks it with the purifier library's `checkLock`.
 
 `nix/lib/build-yarn-berry-project.nix` documents the arguments. Besides
-`pkgs` and `src`, they include `fetchers` (replaces fetchers of the
-purifier library, such as `fetchurl` for a company mirror or credentials),
-`lockFile`, `yarnLock`, `workspaces` (builds only the listed workspaces),
+`src`, they include `fetchers` (replaces fetchers of the purifier library,
+such as `fetchurl` for a company mirror or credentials), `lockFile`,
+`yarnLock`, `workspaces` (builds only the listed workspaces),
 `buildScripts`, `node`, `nativeBuildInputs` and `buildInputs`.
 
 A flake that packages a project it does not change keeps the purifier
@@ -95,9 +115,9 @@ devShells.${system}.default = pkgs.mkShell {
 };
 ```
 
-## Everyday loop
+## Development loop
 
-The everyday loop is Yarn's own commands, run through the flake's `yarn`
+The development loop is Yarn's own commands, run through the flake's `yarn`
 wrapper, which loads the plugin from a temporary home directory's
 `.yarnrc.yml`. `nix develop github:nix-purifiers/yarn-berry-purifier`
 gives a shell with that `yarn`, the `yarn-berry-purifier` command and
@@ -141,18 +161,18 @@ systems it names. A relock of an unchanged project writes the same
 lockfile byte for byte.
 
 `yarn-berry-purifier publish`, run in a workspace, publishes the tarball
-that the sandboxed build packs for it, through the same request and with
-the same registry, credentials and options as `yarn npm publish`.
-`--tarball <file>` publishes a tarball that is already built.
+that the sandboxed build packs for it, with the registry, credentials and
+options that `yarn npm publish` uses. `--tarball <file>` publishes a
+tarball that is already built.
 
-## Offline work
+## Working offline
 
-`yarn-berry-purifier prefetch` realizes in the Nix store what the everyday
-loop needs for the current system, with garbage-collector roots in the
-`.yarn-berry-purifier` directory beside the purifier lockfile: the locked
-downloads, the Yarn release the lockfile names, and the Node.js and Yarn
-that the command runs on. Afterwards `yarn install` and the project's
-scripts work with the network cut off.
+`yarn-berry-purifier prefetch` realizes in the Nix store what the
+development loop needs for the current system, with garbage-collector
+roots in the `.yarn-berry-purifier` directory beside the purifier
+lockfile: the locked downloads, the Yarn release the lockfile names, and
+the Node.js and Yarn that the command runs on. Afterwards `yarn install`
+and the scripts of the project work with the network cut off.
 
 ```zsh
 yarn-berry-purifier prefetch
@@ -162,23 +182,23 @@ A purifier lockfile at `<dir>/yarn-berry-purifier.lock.json` gets its roots
 in `<dir>/.yarn-berry-purifier/`, and the same holds for any other file
 name, so one purifier lockfile belongs in each directory. For the default
 place, `<dir>` is the project root. For a purifier lockfile outside the
-project, the roots lie beside it and the project holds none. The plugin
-finds the roots from the lockfile path in the same way, so a developer who
-prefetched with `--lockfile <path>` runs the everyday loop with
+project, the roots lie beside it. The plugin finds the roots from the
+lockfile path in the same way, so a developer who prefetched with
+`--lockfile <path>` runs the development loop with
 `YARN_BERRY_PURIFIER_LOCKFILE=<path>` set, which the dev shell of the
 packaging flake does for them.
 
 ## Editor
 
-JavaScript editors take their tools from the project's installed
-dependencies: TypeScript's language server comes from the `typescript`
-package, and ESLint and Prettier come from their own packages. After
-`yarn-berry-purifier prefetch` and `yarn install`, those tools are in place
-and work offline. A project that uses Plug'n'Play needs Yarn's editor SDK,
-which `yarn dlx @yarnpkg/sdks` installs; `@yarnpkg/sdks` then has to be a
-dev dependency, so that the purifier lockfile records it.
+JavaScript editors take their tools from the dependencies that Yarn
+installs in the project: TypeScript's language server comes from the
+`typescript` package, and ESLint and Prettier come from their own
+packages. After `yarn-berry-purifier prefetch` and `yarn install`, those
+tools are in place and work offline. A project that uses Plug'n'Play needs
+Yarn's editor SDK, which `yarn dlx @yarnpkg/sdks` installs; `@yarnpkg/sdks`
+then has to be a dev dependency, so that the purifier lockfile records it.
 
-## Errors and fixes
+## Troubleshooting
 
 Every error names the command that fixes it.
 
@@ -217,8 +237,12 @@ Every error names the command that fixes it.
 - A file whose content differs from the locked hash fails its fixed-output
   fetch in Nix, and Yarn's own checksum check fails an install from a
   changed file.
+- A user behind a proxy sets it for Yarn, which reads the setting
+  `httpsProxy` in `.yarnrc.yml` or the variable `YARN_HTTPS_PROXY` and
+  ignores `HTTPS_PROXY`. The commands `lock` and `update` download through
+  Yarn, so they use the same setting.
 
-## Sources supported and refused
+## Supported language repositories
 
 - Registry packages, tarball URLs and GitHub dependencies arrive through
   Yarn's network hook, and the lockfile records them as downloads.
@@ -310,9 +334,11 @@ builder:
   outputs = { nixpkgs, yarn-berry-purifier, prettier, ... }:
     let
       system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      project = yarn-berry-purifier.lib.yarn-berry-purifier.buildYarnBerryProject {
-        inherit pkgs;
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ yarn-berry-purifier.overlays.default ];
+      };
+      project = pkgs.buildYarnBerryProject {
         src = prettier;
         lockFile = ./prettier.lock.json;
       };
@@ -326,7 +352,8 @@ builder:
 
 Nix flakes see only the files that git tracks, so add `flake.nix` and
 `prettier.lock.json` to the repository of the packaging flake. Then build
-the `prettier` command, and run the project's test script in the sandbox:
+the `prettier` command, and run the test script of the project in the
+sandbox:
 
 ```zsh
 cd ../packaging
