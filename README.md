@@ -126,7 +126,7 @@ relocks the purifier lockfile against the new `yarn.lock`. It takes
 `--lockfile` and `--system` as `lock` does.
 
 ```zsh
-yarn-berry-purifier update kleur
+yarn-berry-purifier update typescript
 ```
 
 The lock run copies the project into `.yarn-berry-purifier/lock-run` at the
@@ -243,23 +243,17 @@ Every error names the command that fixes it.
 
 These are refused or unsupported:
 
-- A package whose install script downloads files itself, outside Yarn, such
-  as sharp 0.30, which downloads libvips from GitHub, fails in the sandbox,
-  because the plugin sees only the downloads that go through Yarn. Such a
-  package can use a library from Nix through `buildInputs` when the package
-  supports that, or `workspaces` can leave out the workspace that depends on
-  it.
+- A package whose install script downloads files itself, outside Yarn,
+  fails in the sandbox, because the plugin sees only the downloads that go
+  through Yarn. An image library that fetches a prebuilt native library
+  while it installs is one example. Such a package can use a library from
+  Nix through `buildInputs` when the package supports that, or
+  `workspaces` can leave out the workspace that depends on it.
 - Yarn itself refuses to pack a git dependency whose repository uses pnpm.
-- The react-dnd project at `1de654eb466b9563fa50df070c244d6f3ab43ca7` (Yarn
-  3.3.1) locks but does not build. Its documentation site depends on
-  sharp, which downloads libvips in its install script, and on lmdb, whose
-  node-gyp needs the distutils module. The `workspaces` argument leaves
-  the documentation site out, and the setuptools in the default Python
-  gives node-gyp its distutils. With `workspaces` set to its library
-  packages, the install still fails inside Yarn 3.3.1 with "Cannot read
-  properties of undefined (reading '/build/yarn-source/.pnp.cjs')" on
-  Node.js 22 and 24. The same failure has not been reproduced on a current
-  Yarn release.
+- The lock run covers x86_64-linux, aarch64-linux, x86_64-darwin and
+  aarch64-darwin. A build on another system is unsupported, and a build on
+  one of these four that the lockfile leaves out fails until the lock run
+  covers it.
 - The plugin loads through the wrapper. A `yarn plugin import` of
   `plugin/purifier.cjs` alone does not work, because the plugin requires
   `plugin/foreign.cjs` beside it.
@@ -272,19 +266,77 @@ Node.js that runs the build.
 
 ## Examples
 
-These projects are examples that CI locks and builds. They are not a
-complete list of the projects that work.
+### Prettier
 
-- prettier at `bed4edbb1cf2a9db4004215b0ce5707cdb02b5d9` uses Yarn 4.18.1
-  from its `yarnPath`. It builds in the sandbox with its own build script,
-  and its installed command formats a file. A flake check builds it from
-  the purifier lockfile in `tests/real-world`, which is kept outside the
-  project.
-- The projects in `tests/fixtures` are small and cover one source each: a
-  workspace, a GitHub dependency, a `patch:`, `portal:`, `link:` and
-  `file:` dependency, a git repository that Yarn clones, and git
-  dependencies that Yarn packs with npm or with Yarn Classic. The flake
-  checks lock, build and run them.
+Prettier is a project that a user packages without changing it, so its
+purifier lockfile lies beside the flake that builds it, outside the
+project. This example uses release 3.6.2. Clone that release, and write
+the purifier lockfile in a `packaging` directory next to the clone:
+
+```zsh
+mkdir packaging
+git clone --branch 3.6.2 https://github.com/prettier/prettier
+cd prettier
+yarn-berry-purifier lock --lockfile ../packaging/prettier.lock.json
+yarn-berry-purifier prefetch --lockfile ../packaging/prettier.lock.json
+```
+
+The `lock` command installs the clone once for each Nix system and records
+the downloads in `packaging/prettier.lock.json`. The `prefetch` command
+realizes them in the Nix store, with garbage-collector roots in
+`packaging/.yarn-berry-purifier`. In a shell with the `yarn` wrapper, a
+developer who sets the variable that names the lockfile can then install
+and build the clone with the network cut off:
+
+```zsh
+export YARN_BERRY_PURIFIER_LOCKFILE="$PWD/../packaging/prettier.lock.json"
+yarn install
+yarn build
+```
+
+The flake in `packaging/flake.nix` takes prettier as an input that is not
+a flake, at the same release, and passes the lockfile beside it to the
+builder:
+
+```nix
+{
+  inputs.yarn-berry-purifier.url = "github:nix-purifiers/yarn-berry-purifier";
+  inputs.nixpkgs.follows = "yarn-berry-purifier/nixpkgs";
+  inputs.prettier = {
+    url = "github:prettier/prettier/3.6.2";
+    flake = false;
+  };
+
+  outputs = { nixpkgs, yarn-berry-purifier, prettier, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+      project = yarn-berry-purifier.lib.yarn-berry-purifier.buildYarnBerryProject {
+        inherit pkgs;
+        src = prettier;
+        lockFile = ./prettier.lock.json;
+      };
+    in
+    {
+      packages.${system}.default = project.packages.prettier;
+      checks.${system}.tests = project.tests;
+    };
+}
+```
+
+Nix flakes see only the files that git tracks, so add `flake.nix` and
+`prettier.lock.json` to the repository of the packaging flake. Then build
+the `prettier` command, and run the project's test script in the sandbox:
+
+```zsh
+cd ../packaging
+nix build
+nix flake check
+```
+
+The purifier lockfile belongs to one `yarn.lock`. After the flake's
+`prettier` input moves to another release, run `yarn-berry-purifier lock
+--lockfile ../packaging/prettier.lock.json` in a clone of that release.
 
 ## Credits
 
