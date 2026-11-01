@@ -199,6 +199,47 @@ in
     in
     evalCheck "stale-lock" (!result.success) "a purifier lockfile for another yarn.lock evaluated";
 
+  # A lock run of fixtures/app reproduces its committed purifier lockfile
+  # byte for byte. The lock run needs the network, so the check is a
+  # fixed-output build with an empty output. Nix builds a fixed-output
+  # derivation once per name, so the name carries a digest of the plugin
+  # and the fixture, and the check runs again when either changes.
+  relock =
+    let
+      digest = builtins.hashString "sha256" (
+        lib.concatMapStrings builtins.readFile [
+          ../plugin/purifier.cjs
+          ../plugin/foreign.cjs
+          ./fixtures/app/package.json
+          ./fixtures/app/yarn.lock
+          ./fixtures/app/yarn-berry-purifier.lock.json
+        ]
+      );
+    in
+    pkgs.runCommand "relock-${builtins.substring 0 16 digest}"
+      {
+        nativeBuildInputs = [
+          pkgs.yarn-berry
+          pkgs.cacert
+        ];
+        outputHashMode = "flat";
+        outputHashAlgo = "sha256";
+        outputHash = builtins.hashString "sha256" "";
+      }
+      ''
+        ${yarnWithPlugin}
+        export NODE_EXTRA_CA_CERTS=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+        cp -r ${./fixtures/app} project
+        chmod -R u+w project
+        cd project
+        yarn purifier lock
+        if ! cmp yarn-berry-purifier.lock.json ${./fixtures/app/yarn-berry-purifier.lock.json}; then
+          diff ${./fixtures/app/yarn-berry-purifier.lock.json} yarn-berry-purifier.lock.json >&2
+          exit 1
+        fi
+        touch $out
+      '';
+
   # Malformed purifier lockfiles fail evaluation: one that holds no
   # object, one without its inputsHash, and one with a download entry
   # without a hash.

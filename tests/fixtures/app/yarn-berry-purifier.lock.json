@@ -49,5 +49,8 @@
         "x86_64-linux"
       ]
     }
-  ]
+  ],
+  "repositories": [],
+  "npmLocks": [],
+  "externals": []
 }
