@@ -96,8 +96,10 @@ A flake is optional and can live in the project or in another repository:
 
 ```nix
 {
-  inputs.yarn-berry-purifier.url = "github:nix-purifiers/yarn-berry-purifier";
-  inputs.nixpkgs.follows = "yarn-berry-purifier/nixpkgs";
+  inputs.yarn-berry-purifier.url =
+    "github:nix-purifiers/yarn-berry-purifier";
+  inputs.nixpkgs.follows =
+    "yarn-berry-purifier/nixpkgs";
 
   outputs =
     { nixpkgs, yarn-berry-purifier, ... }:
@@ -105,14 +107,19 @@ A flake is optional and can live in the project or in another repository:
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ yarn-berry-purifier.overlays.default ];
+        overlays = [
+          yarn-berry-purifier.overlays.default
+        ];
       };
-      project = pkgs.yarn-berry-purifier.buildYarnBerryProject {
-        src = ./.;
-      };
+      project =
+        pkgs.yarn-berry-purifier.buildYarnBerryProject
+          {
+            src = ./.;
+          };
     in
     {
-      packages.${system}.my-app = project.packages.my-app;
+      packages.${system}.my-app =
+        project.packages.my-app;
       checks.${system}.tests = project.tests;
     };
 }
@@ -182,10 +189,15 @@ that shell runs the commands, and the `yarn` wrapper, with no flag:
 
 ```nix
 devShells.${system}.default = pkgs.mkShell {
-  packages = [ yarn-berry-purifier.packages.${system}.yarn ];
-  YARN_BERRY_PURIFIER_LOCKFILE = toString ./my-app.lock.json;
-  YARN_BERRY_PURIFIER_TOOL_LOCKFILE = toString ./my-app.yarn.lock;
+  packages = [
+    yarn-berry-purifier.packages.${system}.yarn
+  ];
+  YARN_BERRY_PURIFIER_LOCKFILE =
+    toString ./my-app.lock.json;
+  YARN_BERRY_PURIFIER_TOOL_LOCKFILE =
+    toString ./my-app.yarn.lock;
 };
+
 ```
 
 ### One-off builds without a project Nix file
@@ -401,8 +413,10 @@ builder:
 
 ```nix
 {
-  inputs.yarn-berry-purifier.url = "github:nix-purifiers/yarn-berry-purifier";
-  inputs.nixpkgs.follows = "yarn-berry-purifier/nixpkgs";
+  inputs.yarn-berry-purifier.url =
+    "github:nix-purifiers/yarn-berry-purifier";
+  inputs.nixpkgs.follows =
+    "yarn-berry-purifier/nixpkgs";
   inputs.prettier = {
     url = "github:prettier/prettier/3.6.2";
     flake = false;
@@ -419,15 +433,20 @@ builder:
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ yarn-berry-purifier.overlays.default ];
+        overlays = [
+          yarn-berry-purifier.overlays.default
+        ];
       };
-      project = pkgs.yarn-berry-purifier.buildYarnBerryProject {
-        src = prettier;
-        lockFile = ./prettier.lock.json;
-      };
+      project =
+        pkgs.yarn-berry-purifier.buildYarnBerryProject
+          {
+            src = prettier;
+            lockFile = ./prettier.lock.json;
+          };
     in
     {
-      packages.${system}.default = project.packages.prettier;
+      packages.${system}.default =
+        project.packages.prettier;
     };
 }
 ```
