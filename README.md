@@ -358,8 +358,8 @@ Yarn Berry project, run the lock command, commit both lockfiles, and
 build with the flake of the Quickstart:
 
 ```zsh
-nix run \
-  'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
+nix shell 'github:nix-purifiers/yarn-berry-purifier#toolchain'
+yarn-berry-purifier lock
 git add yarn.lock yarn-berry-purifier.lock.json
 nix build
 ```
