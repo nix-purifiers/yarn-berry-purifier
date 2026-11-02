@@ -10,7 +10,9 @@ optional next step.
 Install the integration into your Nix profile once:
 
 ```sh
-nix profile install 'github:nix-purifiers/yarn-berry-purifier#yarn' 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier'
+nix profile install \
+  'github:nix-purifiers/yarn-berry-purifier#yarn' \
+  'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier'
 ```
 
 This installs the `yarn` wrapper. Use it for the locked
@@ -110,14 +112,17 @@ A flake is optional and can live in the project or in another repository:
   inputs.yarn-berry-purifier.url = "github:nix-purifiers/yarn-berry-purifier";
   inputs.nixpkgs.follows = "yarn-berry-purifier/nixpkgs";
 
-  outputs = { nixpkgs, yarn-berry-purifier, ... }:
+  outputs =
+    { nixpkgs, yarn-berry-purifier, ... }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
         inherit system;
         overlays = [ yarn-berry-purifier.overlays.default ];
       };
-      project = pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; };
+      project = pkgs.yarn-berry-purifier.buildYarnBerryProject {
+        src = ./.;
+      };
     in
     {
       packages.${system}.my-app = project.packages.my-app;
@@ -179,7 +184,9 @@ variables as the Yarn settings `berryPurifierLockfile` and
 variable that it does not know.
 
 ```zsh
-yarn-berry-purifier lock --lockfile ../packaging/my-app.lock.json --tool-lockfile ../packaging/my-app.yarn.lock
+yarn-berry-purifier lock --lockfile \
+  ../packaging/my-app.lock.json --tool-lockfile \
+  ../packaging/my-app.yarn.lock
 ```
 
 The dev shell of the flake that calls the builder can set the variables to
@@ -200,15 +207,15 @@ For an ad hoc build, the builder can also be evaluated directly from the
 project root. Replace the example package name with one from your project:
 
 ```zsh
-nix build --impure --expr '
-  let
-    purifier = builtins.getFlake "github:nix-purifiers/yarn-berry-purifier";
-    pkgs = import purifier.inputs.nixpkgs {
-      system = builtins.currentSystem;
-      overlays = [ purifier.overlays.default ];
-    };
-  in
-  (pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; }).packages.my-app'
+nix build --impure --expr 'let
+  purifier = builtins.getFlake "github:nix-purifiers/yarn-berry-purifier";
+  pkgs = import purifier.inputs.nixpkgs {
+    system = builtins.currentSystem;
+    overlays = [ purifier.overlays.default ];
+  };
+in
+(pkgs.yarn-berry-purifier.buildYarnBerryProject { src = ./.; })
+.packages.my-app'
 ```
 
 This uses the purifier's pinned nixpkgs, matching the lock command above.
@@ -364,7 +371,8 @@ Yarn Berry project, run the lock command, commit both lockfiles, and
 build with the flake of the Quickstart:
 
 ```zsh
-nix run 'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
+nix run \
+  'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier' -- lock
 git add yarn.lock yarn-berry-purifier.lock.json
 nix build
 ```
@@ -380,8 +388,10 @@ the purifier lockfile in a `packaging` directory next to the clone:
 mkdir packaging
 git clone --branch 3.6.2 https://github.com/prettier/prettier
 cd prettier
-yarn-berry-purifier lock --lockfile ../packaging/prettier.lock.json
-yarn-berry-purifier prefetch --lockfile ../packaging/prettier.lock.json
+yarn-berry-purifier lock --lockfile \
+  ../packaging/prettier.lock.json
+yarn-berry-purifier prefetch --lockfile \
+  ../packaging/prettier.lock.json
 ```
 
 The `lock` command installs the clone once for each Nix system and records
@@ -392,7 +402,8 @@ developer who sets the variable that names the lockfile can then install
 and build the clone with the network cut off:
 
 ```zsh
-export YARN_BERRY_PURIFIER_LOCKFILE="$PWD/../packaging/prettier.lock.json"
+export \
+  YARN_BERRY_PURIFIER_LOCKFILE="$PWD/../packaging/prettier.lock.json"
 yarn install
 yarn build
 ```
@@ -410,7 +421,13 @@ builder:
     flake = false;
   };
 
-  outputs = { nixpkgs, yarn-berry-purifier, prettier, ... }:
+  outputs =
+    {
+      nixpkgs,
+      yarn-berry-purifier,
+      prettier,
+      ...
+    }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
