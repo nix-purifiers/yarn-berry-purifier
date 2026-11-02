@@ -84,6 +84,21 @@ that the sandboxed build packs for it, with the registry, credentials and
 options that `yarn npm publish` uses. `--tarball <file>` publishes a
 tarball that is already built.
 
+## Published plugin
+
+To load the plugin into an existing Yarn Berry installation:
+
+```zsh
+site=https://nix-purifiers.github.io
+yarn plugin import \
+  "$site/yarn-berry-purifier/plugins/purifier.cjs"
+```
+
+[Versioned plugins](https://nix-purifiers.github.io/yarn-berry-purifier/plugins/) are attached to each
+[release](https://github.com/nix-purifiers/yarn-berry-purifier/releases).
+The published plugin warns that it was resolved impurely; the Quickstart
+wrapper provides pure plugin resolution.
+
 ## Building the project with Nix
 
 Once the native development workflow is working, you can also build and
