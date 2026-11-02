@@ -10,9 +10,7 @@ optional next step.
 From the project root:
 
 ```zsh
-nix shell \
-  'github:nix-purifiers/yarn-berry-purifier#yarn' \
-  'github:nix-purifiers/yarn-berry-purifier#yarn-berry-purifier'
+nix shell 'github:nix-purifiers/yarn-berry-purifier#toolchain'
 yarn-berry-purifier lock
 yarn install
 yarn run build
@@ -39,7 +37,7 @@ For persistent use, add these packages through your usual Nix configuration.
 
 The development loop is Yarn's own commands, run through the flake's `yarn`
 wrapper, which loads the plugin from a temporary home directory's
-`.yarnrc.yml`. `nix develop github:nix-purifiers/yarn-berry-purifier`
+`.yarnrc.yml`. `nix shell 'github:nix-purifiers/yarn-berry-purifier#toolchain'`
 gives a shell with that `yarn`, the `yarn-berry-purifier` command and
 Node.js.
 

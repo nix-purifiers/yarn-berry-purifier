@@ -36,6 +36,16 @@
     { config, pkgs, ... }:
     {
       packages.default = config.packages.yarn;
+      # The interactive toolchain is a package so nix shell can expose it
+      # without entering the derivation's build environment.
+      packages.toolchain = pkgs.buildEnv {
+        name = "yarn-berry-purifier-toolchain";
+        paths = [
+          config.packages.yarn
+          config.packages.yarn-berry-purifier
+          pkgs.nodejs
+        ];
+      };
       devShells.default = pkgs.mkShell {
         packages = [
           config.packages.yarn
