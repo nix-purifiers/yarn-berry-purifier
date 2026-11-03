@@ -16,7 +16,11 @@ root = Path(__file__).resolve().parent.parent
 system = subprocess.check_output(['nix','eval','--impure','--raw','--expr','builtins.currentSystem'], text=True).strip()
 snapshot = json.loads(subprocess.check_output(['nix','flake','archive','--json','--no-write-lock-file',str(root)], text=True))['path']
 with tempfile.TemporaryDirectory(prefix='yarn-berry-native-composition-') as temporary:
-    temporary = Path(temporary)
+    # The physical path: on macOS the temporary directory lies under /var, a
+    # symlink. Yarn records the cache in HOME relative to the physical
+    # project directory, and Plug'n'Play then knows no package at the
+    # resolved paths Node loads.
+    temporary = Path(temporary).resolve()
     subprocess.run(['nix-store','--add-root',str(temporary/'source'),'--realise',snapshot],check=True)
     cli = Path(subprocess.check_output(['nix','build','path:'+snapshot+'#toolchain','--out-link',str(temporary/'cli'),'--print-out-paths'],text=True).strip())/'bin/yarn-berry-purifier'
     env = dict(os.environ, BERRY_COMPOSITION_FLAKE=snapshot)
