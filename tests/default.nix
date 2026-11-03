@@ -742,6 +742,10 @@ in
       ''
         ${yarnWithPlugin}
         node ${./registry.js} "$TMPDIR/port" "$TMPDIR/body" &
+        # Darwin builds have no PID namespace, so a registry left running
+        # would keep the build's log open after the builder exits.
+        server=$!
+        trap 'kill $server' EXIT
         while [ ! -s "$TMPDIR/port" ]; do sleep 0.1; done
         export YARN_NPM_PUBLISH_REGISTRY="http://127.0.0.1:$(cat "$TMPDIR/port")"
         export YARN_NPM_AUTH_TOKEN=token
@@ -873,8 +877,8 @@ in
   # A real-world project, pinned: prettier on Yarn 4.18.1, the release its
   # .yarnrc.yml names, built by its own build script. The purifier
   # lockfile, real-world/prettier.lock.json, is the output of
-  # `yarn-berry-purifier lock` for the pinned commit, kept outside the
-  # source. builtins.fetchTarball fetches the source at evaluation time, so
+  # `yarn-berry-purifier lock` with a `--system` for each of the flake's
+  # systems, for the pinned commit, kept outside the source. builtins.fetchTarball fetches the source at evaluation time, so
   # the builder reads its package.json files without import from
   # derivation.
   prettier =
