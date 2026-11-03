@@ -15,12 +15,23 @@
   lockFile ? src + "/yarn-berry-purifier.lock.json",
   # The name of the package to publish.
   package,
+  projected ? false,
 }:
 let
   project = pkgs.yarn-berry-purifier.buildYarnBerryProject { inherit src yarnLock lockFile; };
   file = (builtins.replaceStrings [ "@" "/" ] [ "" "__" ] package) + ".tgz";
 in
-pkgs.runCommand "yarn-berry-purifier-publish" { } ''
-  mkdir -p "$out"
-  ln -s ${project.release}/${pkgs.lib.escapeShellArg file} "$out/package.tgz"
-''
+if projected then
+  let
+    repository = project.packages.${package}.projections.npm;
+  in
+  pkgs.runCommand "yarn-berry-purifier-publication" { } ''
+    mkdir -p "$out"
+    cp -rs ${repository}/. "$out/"
+    ln -s ${repository.catalog} "$out/catalog.json"
+  ''
+else
+  pkgs.runCommand "yarn-berry-purifier-publish" { } ''
+    mkdir -p "$out"
+    ln -s ${project.release}/${pkgs.lib.escapeShellArg file} "$out/package.tgz"
+  ''

@@ -16,12 +16,11 @@
 }:
 let
   inherit (pkgs) lib;
-  read = import ./read-lock.nix { inherit lib; } {
-    src = dirOf yarnLock;
-    inherit lockFile yarnLock;
-  };
-  lock = builtins.seq (purifier.checkLock read) (
-    import ./lock.nix { inherit lib lockFile yarnLock; }
-  );
+  raw = import ./lock.nix { inherit lib lockFile yarnLock; };
+  lock = builtins.seq (purifier.checkLock {
+    purifier = "yarn-berry-purifier";
+    inherit (raw) entries problems;
+    outputs = { };
+  }) raw;
 in
 purifier.fetchEntry { inherit pkgs; } lock.release

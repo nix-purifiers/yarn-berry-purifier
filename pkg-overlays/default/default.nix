@@ -24,6 +24,7 @@ in
     // {
       yarn-berry-purifier = scoped.yarn-berry-purifier.overrideScope (
         self: _: {
+          inherit (closure-lib) purifier;
           buildYarnBerryProject = self.callPackage ../../nix/lib/build-yarn-berry-project.nix {
             inherit (closure-lib) purifier;
           };

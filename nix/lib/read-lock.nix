@@ -20,13 +20,23 @@
 {
   # The root of the Yarn project.
   src,
+  excludedPaths ? [ ],
+  excludedRemotes ? [ ],
   # Yarn's lockfile.
   yarnLock ? src + "/yarn.lock",
   # The purifier lockfile.
   lockFile ? src + "/yarn-berry-purifier.lock.json",
 }:
 let
-  lock = import ./lock.nix { inherit lib yarnLock lockFile; };
+  lock = import ./lock.nix {
+    inherit
+      lib
+      yarnLock
+      lockFile
+      excludedPaths
+      excludedRemotes
+      ;
+  };
 in
 {
   purifier = "yarn-berry-purifier";

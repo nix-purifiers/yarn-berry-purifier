@@ -31,6 +31,7 @@ const os = require("os");
 const path = require("path");
 const childProcess = require("child_process");
 const foreign = require("./foreign.cjs");
+const npmInputs = require("./npm-inputs.cjs")({python:"@python@",tools:"@projectInputsTool@"});
 
 // The plugin's Nix library and Nix itself. The package that builds the
 // plugin replaces these two placeholders with store paths.
@@ -149,7 +150,7 @@ function readLock(lockPath, toolLock) {
     fail(`has version ${JSON.stringify(lock.version)}, and this yarn-berry-purifier reads version ${LOCK_VERSION}`);
   }
   if (lock.contentHash !== contentHash(lock)) fail("was changed after it was written; its contentHash does not match");
-  if (lock.inputsHash !== inputsHash(toolLock)) fail("was written for another yarn.lock");
+  if (lock.inputsHash !== inputsHash(toolLock) && process.env.BERRY_PURIFIER_ORIGINAL_INPUTS_HASH !== lock.inputsHash) fail("was written for another yarn.lock");
   return lock;
 }
 
@@ -417,11 +418,13 @@ module.exports = {
   factory: (require) => {
     restoreExternalLockfile();
     const { BaseCommand } = require("@yarnpkg/cli");
-    const { Configuration, Project, httpUtils, YarnVersion, SettingsType } = require("@yarnpkg/core");
+    const { Configuration, Project, httpUtils, YarnVersion, SettingsType, structUtils, semverUtils } = require("@yarnpkg/core");
     const { Option } = require("clipanion");
 
     class LockCommand extends BaseCommand {
       static paths = [["purifier", "lock"]];
+
+      inputs = Option.Array("--input", {description:"A Nix producer whose native repository supplies project dependencies"});
 
       systems = Option.Array("--system", {
         description: "A Nix system to lock for; the default is every system yarn-berry-purifier knows",
@@ -442,6 +445,8 @@ module.exports = {
         const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
         const { project } = await Project.find(configuration, this.context.cwd);
         const root = project.cwd.startsWith("/") ? project.cwd : path.resolve(project.cwd);
+        const inputContext = npmInputs.context(root,lockPathFor(root,this.lockfile,this.context.cwd),this.inputs);
+        npmInputs.activate(inputContext);
         const systems = this.systems && this.systems.length > 0 ? this.systems : Object.keys(SYSTEMS);
         for (const system of systems) {
           if (!SYSTEMS[system]) throw new Error(`yarn-berry-purifier: unknown system ${system}`);
@@ -452,6 +457,22 @@ module.exports = {
         // without one gets the yarn.lock that Yarn writes.
         const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
         startToolLock(root, toolLock);
+        if (inputContext.projectInputs.length) {
+          const scratch = path.join(root,ROOTS_DIR,"input-resolution");
+          fs.rmSync(scratch,{recursive:true,force:true});
+          try {
+            copyProject(root,scratch);
+            const native = path.join(scratch,"yarn.lock");
+            if (fs.existsSync(toolLock)) fs.copyFileSync(toolLock,native);
+            else fs.writeFileSync(native,"");
+            const resolved = childProcess.spawnSync(process.execPath,[process.argv[1],"install","--mode=skip-build"],{
+              cwd:scratch,stdio:["ignore","inherit","inherit"],env:{...process.env,BERRY_PURIFIER:"0",YARN_ENABLE_IMMUTABLE_INSTALLS:"false"},
+            });
+            if (resolved.status !== 0) throw new Error("yarn-berry-purifier: could not bind the Nix project inputs");
+            fs.mkdirSync(path.dirname(toolLock),{recursive:true});
+            fs.copyFileSync(native,toolLock);
+          } finally { fs.rmSync(scratch,{recursive:true,force:true}); }
+        }
         if (toolLock === path.join(root, "yarn.lock") && !fs.existsSync(toolLock)) {
           this.context.stdout.write("yarn-berry-purifier: no yarn.lock; running yarn install to write one\n");
           const created = childProcess.spawnSync(process.execPath, [process.argv[1], "install", "--mode=skip-build"], {
@@ -576,6 +597,7 @@ module.exports = {
           const yarn = await lockedYarn(configuration, root);
           const content = {
             inputsHash: inputsHash(toolLock),
+            ...(inputContext.projectInputs.length ? {projectInputs:inputContext.projectInputs} : {}),
             yarn,
             // A download's mirrors follow from its URL by the rule of
             // registryMirrors, which nix/lib/lock.nix applies, so the
@@ -626,6 +648,8 @@ module.exports = {
         description: `Update the yarn.lock at this path, else at ${TOOL_LOCKFILE_ENV}, else yarn.lock at the project root; the project's copy stays as it is when the path names another file`,
       });
 
+      inputs = Option.Array("--input", {description:"A Nix producer whose native repository supplies project dependencies"});
+
       systems = Option.Array("--system", {
         description: "A Nix system to lock for; the default is every system yarn-berry-purifier knows",
       });
@@ -643,6 +667,7 @@ module.exports = {
         const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
         const { project } = await Project.find(configuration, this.context.cwd);
         const root = path.resolve(project.cwd);
+        npmInputs.activate(npmInputs.context(root,lockPathFor(root,this.lockfile,this.context.cwd),this.inputs,true));
         const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
         if (toolLock === path.join(root, "yarn.lock")) {
           run(["up", "--recursive", ...patterns], this.context.cwd);
@@ -738,7 +763,7 @@ module.exports = {
       static paths = [["purifier", "publish"]];
 
       access = Option.String("--access", { description: "The access for the published package (public or restricted)" });
-      tag = Option.String("--tag", "latest", { description: "The tag on the registry that the package should be attached to" });
+      tag = Option.String("--tag", { description: "The tag on the registry that the package should be attached to" });
       otp = Option.String("--otp", { description: "The OTP token to use with the command" });
       tarball = Option.String("--tarball", { description: "Publish this tarball instead of building one" });
       lockfile = Option.String("--lockfile", {
@@ -749,8 +774,9 @@ module.exports = {
       });
 
       async execute() {
+        process.env.BERRY_PURIFIER = "0";
         const { npmConfigUtils, npmHttpUtils, npmPublishUtils } = require("@yarnpkg/plugin-npm");
-        const { structUtils } = require("@yarnpkg/core");
+        const { structUtils, Manifest } = require("@yarnpkg/core");
         const configuration = await Configuration.find(this.context.cwd, this.context.plugins);
         const { project, workspace } = await Project.find(configuration, this.context.cwd);
         if (!workspace || !workspace.manifest.name) {
@@ -765,7 +791,8 @@ module.exports = {
           const lockPath = lockPathFor(root, this.lockfile, this.context.cwd);
           const toolLock = toolLockPathFor(root, this.toolLockfile, this.context.cwd);
           // The file is checked before Nix reads it.
-          readLock(lockPath, toolLock);
+          const metadata = readLock(lockPath, toolLock);
+          const composed = (metadata.projectInputs || []).length > 0;
           const out = childProcess
             .execFileSync(
               "nix",
@@ -775,7 +802,7 @@ module.exports = {
                 "--no-link",
                 "--print-out-paths",
                 "--expr",
-                `import ${NIX_LIB}/publish.nix { pkgs = ${PKGS_WITH_OVERLAY}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; yarnLock = /. + builtins.getEnv "BERRY_PURIFIER_YARN_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; }`,
+                `import ${NIX_LIB}/publish.nix { pkgs = ${PKGS_WITH_OVERLAY}; src = /. + builtins.getEnv "BERRY_PURIFIER_SRC"; lockFile = /. + builtins.getEnv "BERRY_PURIFIER_LOCK"; yarnLock = /. + builtins.getEnv "BERRY_PURIFIER_YARN_LOCK"; package = builtins.getEnv "BERRY_PURIFIER_PACKAGE"; projected = builtins.getEnv "BERRY_PURIFIER_PROJECTED" == "1"; }`,
               ],
               {
                 stdio: ["ignore", "pipe", "inherit"],
@@ -785,18 +812,45 @@ module.exports = {
                   BERRY_PURIFIER_LOCK: lockPath,
                   BERRY_PURIFIER_YARN_LOCK: toolLock,
                   BERRY_PURIFIER_PACKAGE: name,
+                  BERRY_PURIFIER_PROJECTED: composed ? "1" : "0",
                 },
               },
             )
             .toString()
             .trim();
+          if (composed) {
+            const modules = JSON.parse(fs.readFileSync(path.join(out,"catalog.json"))).modules;
+            for (const item of modules.sort((a,b)=>Number(a.primary)-Number(b.primary) || a.name.localeCompare(b.name))) {
+              const manifest = Manifest.fromText(JSON.stringify(item.package));
+              if (manifest.private) throw new Error(`yarn-berry-purifier: cannot publish private package ${item.name}`);
+              const target = Object.assign(Object.create(workspace),{manifest});
+              const ident = manifest.name;
+              const registry = npmConfigUtils.getPublishRegistry(manifest,{configuration});
+              if (!item.primary) {
+                let known;
+                try {
+                  const document = await npmHttpUtils.get(npmHttpUtils.getIdentUrl(ident),{configuration,registry,ident,jsonResponse:true});
+                  known = document.versions?.[item.version];
+                } catch {}
+                if (known) {
+                  if (known.dist?.integrity === item.integrity) continue;
+                  throw new Error(`registry artifact differs from Nix input: ${item.name}@${item.version}`);
+                }
+              }
+              const buffer = fs.readFileSync(path.join(out,item.archive));
+              const body = await npmPublishUtils.makePublishBody(target,buffer,{access:this.access,tag:this.tag ?? "nix",registry});
+              await npmHttpUtils.put(npmHttpUtils.getIdentUrl(ident),body,{configuration,registry,ident,otp:this.otp,jsonResponse:true});
+              this.context.stdout.write(`yarn-berry-purifier: published ${item.name}@${item.version}\n`);
+            }
+            return 0;
+          }
           tarball = path.join(out, "package.tgz");
         }
         const buffer = fs.readFileSync(tarball);
         const registry = npmConfigUtils.getPublishRegistry(workspace.manifest, { configuration });
         const body = await npmPublishUtils.makePublishBody(workspace, buffer, {
           access: this.access,
-          tag: this.tag,
+          tag: this.tag ?? "latest",
           registry,
         });
         await npmHttpUtils.put(npmHttpUtils.getIdentUrl(ident), body, {
@@ -807,6 +861,50 @@ module.exports = {
           jsonResponse: true,
         });
         this.context.stdout.write(`yarn-berry-purifier: published ${tarball} as ${name}\n`);
+        return 0;
+      }
+    }
+
+    // Nix asks the native SDK which recorded requests belong to supplied
+    // coordinates; it never needs to parse Yarn's lockfile format.
+    class QueryInputsCommand extends BaseCommand {
+      static paths = [["purifier","query-inputs"]];
+      provided = Option.String("--provided");
+      output = Option.String("--output");
+      async execute() {
+        const configuration = await Configuration.find(this.context.cwd,this.context.plugins);
+        const {project} = await Project.find(configuration,this.context.cwd);
+        const spec = JSON.parse(fs.readFileSync(this.provided));
+        const {NpmSemverFetcher,npmConfigUtils,npmHttpUtils} = require("@yarnpkg/plugin-npm");
+        const {gitUtils} = require("@yarnpkg/plugin-git");
+        const {githubUtils,GithubFetcher} = require("@yarnpkg/plugin-github");
+        const urls = new Set();
+        const remotes = new Set();
+        for (const pkg of project.originalPackages.values()) {
+          const name = structUtils.stringifyIdent(pkg);
+          if (!spec.names.includes(name) && !spec.versions.some(item=>item.name===name && item.version===pkg.version)) continue;
+          const reference = pkg.reference;
+          if (githubUtils.isGithubUrl(reference)) {
+            urls.add(new GithubFetcher().getLocatorUrl(pkg,{project}));
+          } else if (gitUtils.isGitUrl(reference)) {
+            const {repo} = gitUtils.splitRepoUrl(reference);
+            remotes.add(gitUtils.normalizeRepoUrl(repo,{git:true}));
+          } else if (reference.startsWith("npm:")) {
+            const {params} = structUtils.parseRange(reference);
+            if (params?.__archiveUrl) urls.add(params.__archiveUrl);
+            else {
+              const registry = npmConfigUtils.getScopeRegistry(pkg.scope,{configuration}).replace(/\/$/,"");
+              urls.add(registry+NpmSemverFetcher.getLocatorUrl(pkg));
+              urls.add(registry+npmHttpUtils.getIdentUrl(pkg));
+            }
+          } else if (/^https?:/.test(reference)) urls.add(reference);
+        }
+        const paths = new Set();
+        for (const url of urls) for (const variant of [url,...registryMirrors(url)]) {
+          paths.add(urlPath(variant));
+          paths.add(urlPath(variant.replace(/%2f/gi,"/")));
+        }
+        fs.writeFileSync(this.output,JSON.stringify({paths:[...paths].sort(),remotes:[...remotes].sort()}));
         return 0;
       }
     }
@@ -919,8 +1017,13 @@ module.exports = {
           isNullable: true,
         },
       },
-      hooks: { wrapNetworkRequest, setupScriptEnvironment, afterAllInstalled },
-      commands: [LockCommand, UpdateCommand, PrefetchCommand, PublishCommand],
+      hooks: { wrapNetworkRequest, setupScriptEnvironment, afterAllInstalled,
+        reduceDependency(dependency,project) {
+          const root = path.resolve(project.cwd);
+          return npmInputs.reduceDependency(dependency,npmInputs.views(root,lockPathFor(root,undefined,root)),structUtils,semverUtils);
+        },
+      },
+      commands: [LockCommand, UpdateCommand, PrefetchCommand, PublishCommand, QueryInputsCommand],
     };
   },
 };

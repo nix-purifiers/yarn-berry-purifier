@@ -60,3 +60,14 @@ jobs:
           sudo unshare -n sudo -u "$USER" env "PATH=$PATH" "HOME=$HOME" \
             "YARN_BERRY_PURIFIER_LOCKFILE=$RUNNER_TEMP/external/app.lock.json" \
             sh -c "$RUNNER_TEMP/yarn/bin/yarn install --immutable && $RUNNER_TEMP/yarn/bin/yarn run build"
+
+  composition-native:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24
+      - run: python3 tests/composition-native.py

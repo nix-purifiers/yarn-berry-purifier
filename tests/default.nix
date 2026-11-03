@@ -203,6 +203,23 @@ let
     '';
 in
 {
+  composition-producer = app.packages.hello-berry;
+  npm-projection =
+    pkgs.runCommand "yarn-berry-npm-projection"
+      {
+        nativeBuildInputs = [
+          pkgs.nodejs
+          pkgs.python3
+        ];
+      }
+      ''
+        export HOME="$TMPDIR/home"
+        mkdir -p "$HOME"
+        python ${./npm-projection.py} ${app.packages.hello-berry.projections.npm} \
+          ${app.packages.hello-berry.projections.npm.catalog} ${pkgs.nodejs}/bin
+        touch "$out"
+      '';
+
   # The package's command prints what its build script wrote, its dev
   # dependency stays out of the installed package, and its release holds
   # the built file.

@@ -42,6 +42,7 @@
   zstd,
   writeText,
   nodejs,
+  nix,
   python3,
   node-gyp,
   git,
@@ -59,6 +60,10 @@
   # that sends credentials to a company mirror. The purifier library's
   # fetchEntry and tree take it unchanged.
   fetchers ? { },
+  dependencies ? purifier.lockedProjectInputs {
+    inputs = (lib.importJSON lockFile).projectInputs or [ ];
+    system = stdenv.hostPlatform.system;
+  },
   # Yarn's lockfile. A yarn.lock given outside `src` replaces the one in
   # `src` during the build.
   yarnLock ? src + "/yarn.lock",
@@ -102,10 +107,60 @@ let
 
   # The lock in memory of the purifier contract, which checkLock fails
   # evaluation on when the lockfiles cannot be used.
-  read = import ./read-lock.nix { inherit lib; } { inherit src yarnLock lockFile; };
+  rawLock = import ./lock.nix { inherit lib lockFile yarnLock; };
+  supplied =
+    if dependencies == [ ] || rawLock.problems != [ ] then
+      {
+        paths = [ ];
+        remotes = [ ];
+      }
+    else
+      let
+        queryYarn =
+          if rawLock.release == null then
+            "${filteredSrc}/${rawLock.yarn.path}"
+          else
+            purifier.fetchEntry fetchArgs rawLock.release;
+        result =
+          runCommand "yarn-berry-supplied-requests.json"
+            {
+              spec = builtins.toJSON {
+                names = inputSelection.names;
+                versions = inputSelection.versions;
+              };
+              passAsFile = [ "spec" ];
+            }
+            ''
+              cp -r ${filteredSrc} project
+              chmod -R u+w project
+              cp --no-preserve=mode ${yarnLock} project/yarn.lock
+              export HOME="$TMPDIR/home" BERRY_PURIFIER_INPUT_VIEWS='[]'
+              export YARN_ENABLE_TELEMETRY=0 YARN_ENABLE_GLOBAL_CACHE=false
+              mkdir -p "$HOME"
+              cat > "$HOME/.yarnrc.yml" <<'EOF'
+              plugins:
+                - path: ${plugin}/purifier.cjs
+                  spec: "@nix-purifiers/plugin-yarn-berry-purifier"
+              EOF
+              cd project
+              ${lib.getExe node} ${queryYarn} purifier query-inputs --provided "$specPath" --output "$out"
+            '';
+      in
+      lib.importJSON result;
+  read = import ./read-lock.nix { inherit lib; } {
+    inherit src yarnLock lockFile;
+    excludedPaths = supplied.paths;
+    excludedRemotes = supplied.remotes;
+  };
   checked = purifier.checkLock read;
   # The rest of the purifier lockfile, read only after the check.
-  lock = builtins.seq checked (import ./lock.nix { inherit lib lockFile yarnLock; });
+  lock = builtins.seq checked (
+    import ./lock.nix {
+      inherit lib lockFile yarnLock;
+      excludedPaths = supplied.paths;
+      excludedRemotes = supplied.remotes;
+    }
+  );
 
   # The entries this system fetches. A lockfile whose lock runs left out
   # this system has downloads, but none for it.
@@ -190,7 +245,7 @@ let
     filter = if srcFilter != null then srcFilter else defaultSrcFilter;
   };
 
-  dependencies = callPackage ./served.nix {
+  served = callPackage ./served.nix {
     inherit purifier fetchers entries;
     inherit (lock) npmLocks externals;
   };
@@ -200,12 +255,20 @@ let
       lib
       node
       plugin
-      dependencies
       ;
+    dependencies = served;
     inherit runtimeShell;
     yarnJs =
       if lock.release == null then "./${lock.yarn.path}" else purifier.fetchEntry fetchArgs lock.release;
   };
+
+  inputSelection = purifier.npmInputSelection { inherit dependencies; };
+  setup = steps.setup + ''
+    export BERRY_PURIFIER_INPUT_VIEWS=${lib.escapeShellArg (builtins.toJSON inputSelection.views)}
+    ${lib.optionalString (dependencies != [ ]) ''
+      YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install --mode=skip-build
+    ''}
+  '';
 
   # The lockfiles given to the builder replace those in the project, so
   # Yarn and the plugin read the given ones.
@@ -268,6 +331,7 @@ let
       name,
       scripts,
       installPhase,
+      nodeModules ? false,
     }:
     stdenv.mkDerivation {
       inherit name installPhase;
@@ -284,7 +348,8 @@ let
       buildPhase = ''
         runHook preBuild
         ${useLockfiles}
-        ${steps.setup}
+        ${lib.optionalString nodeModules "export YARN_NODE_LINKER=node-modules"}
+        ${setup}
         ${patchInstalled}
         YARN_ENABLE_SCRIPTS=0 ${install false}
         patchInstalled
@@ -301,7 +366,7 @@ let
   # `yarn pack` runs the packages' prepack and postpack scripts, as
   # `yarn npm publish` does. The tarballs are what Yarn publishes, byte
   # for byte.
-  release = projectBuild {
+  rawRelease = projectBuild {
     name = "yarn-project-build";
     scripts = [ ];
     installPhase = ''
@@ -344,7 +409,7 @@ let
     buildPhase = ''
       runHook preBuild
       ${useLockfiles}
-      ${steps.setup}
+      ${setup}
       ${patchInstalled}
       export YARN_NODE_LINKER=node-modules
       YARN_ENABLE_SCRIPTS=0 ${install true}
@@ -430,9 +495,52 @@ let
         mainProgram = builtins.head (builtins.attrNames p.bin);
       };
     };
+  capture = projectBuild {
+    name = "yarn-berry-runtime-graph";
+    scripts = [ ];
+    nodeModules = true;
+    installPhase = ''
+      export NPM_PURIFIER_NPM_MODULES=${node}/lib/node_modules/npm/node_modules
+      export NPM_PROJECTION_NIX=${nix}/bin/nix
+      node ${purifier.npmCaptureTool} "$PWD" ${rawRelease} "$out" ${
+        writeText "yarn-berry-own-packages.json" (
+          builtins.toJSON (
+            map (p: {
+              inherit (p) name dir;
+              archive = "${rawRelease}/${tarballName p}";
+            }) ownPackages
+          )
+        )
+      }
+    '';
+  };
+  projectionFor =
+    roots:
+    purifier.npmProjections {
+      graph = "${capture}/graph.json";
+      archives = "${capture}/archives";
+      producer = rawRelease;
+      inherit
+        roots
+        dependencies
+        runCommand
+        python3
+        ;
+    };
+  projections = projectionFor null;
+  release = rawRelease.overrideAttrs (previous: {
+    passthru = (previous.passthru or { }) // {
+      inherit projections;
+    };
+  });
 in
 {
-  packages = lib.mapAttrs (_: mkPackage) ownPackageSet;
-  inherit tests release;
+  packages = lib.mapAttrs (
+    name: p:
+    lib.extendDerivation true {
+      projections = projectionFor [ name ];
+    } (mkPackage p)
+  ) ownPackageSet;
+  inherit tests release projections;
   fetches = checked.entries;
 }

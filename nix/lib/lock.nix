@@ -50,6 +50,8 @@
   lockFile,
   # The project's yarn.lock, which the purifier lockfile was written for.
   yarnLock,
+  excludedPaths ? [ ],
+  excludedRemotes ? [ ],
 }:
 let
   name = toString lockFile;
@@ -150,8 +152,12 @@ in
     if problem != null then
       [ ]
     else
-      map (d: d // lib.optionalAttrs (d ? url) { mirrors = mirrorsOf d.url; }) lock.downloads
-      ++ lock.repositories or [ ]
+      map (d: d // lib.optionalAttrs (d ? url) { mirrors = mirrorsOf d.url; }) (
+        builtins.filter (d: !(builtins.elem d.path excludedPaths)) lock.downloads
+      )
+      ++ (builtins.filter (r: !(builtins.elem (r.remote or "") excludedRemotes)) (
+        lock.repositories or [ ]
+      ))
       ++ lib.optional (release != null) release;
   inherit (lock) yarn;
   inherit release;

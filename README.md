@@ -99,6 +99,30 @@ yarn plugin import \
 The published plugin warns that it was resolved impurely; the Quickstart
 wrapper provides pure plugin resolution.
 
+## Dependencies from other purified projects
+
+```zsh
+nix shell 'github:nix-purifiers/yarn-berry-purifier#toolchain'
+yarn-berry-purifier lock \
+  --input 'github:example/library#library'
+yarn install --immutable
+yarn test
+```
+
+The producer can use Yarn Berry, Yarn Classic, Bun, npm or pnpm. Yarn's
+dependency hook binds requests to the Nix-supplied identities, including
+transitive dependencies, without rewriting package manifests. `projectInputs`
+pins the Nix sources; supplied artifacts have no download entries.
+
+The builder accepts producer outputs through `dependencies = [ library ];`
+and uses recorded `projectInputs` by default. It exports `projections.npm`;
+individual `packages.<name>` and `release` also expose native repositories.
+
+For a composed project, `yarn-berry-purifier publish` publishes namespaced
+archives with exact dependency requirements and the `nix` tag. Ordinary
+package managers can consume the result. A published dependency is reused
+only when its integrity matches the Nix input.
+
 ## Building the project with Nix
 
 Once the native development workflow is working, you can also build and

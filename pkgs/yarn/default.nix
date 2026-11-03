@@ -82,6 +82,10 @@ writeShellApplication {
     # wrapper.
     export YARN_GLOBAL_FOLDER="''${YARN_GLOBAL_FOLDER:-$realHome/.yarn/berry}"
     export BERRY_PURIFIER_HOME="$realHome"
-    HOME="$home" ${lib.getExe yarnBerry} "$@"
+    if [ "''${1:-}" = purifier ] || [ "''${BERRY_PURIFIER_NATIVE_CONTEXT:-0}" = 1 ] || [ -n "''${BERRY_PURIFIER_RECORD:-}''${BERRY_PURIFIER_SERVE:-}" ]; then
+      HOME="$home" ${lib.getExe yarnBerry} "$@"
+    else
+      HOME="$home" node ${plugin}/runner.cjs ${lib.getExe yarnBerry} "$@"
+    fi
   '';
 }

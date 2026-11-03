@@ -18,12 +18,15 @@
 }:
 let
   inherit (pkgs) lib;
-  read = import ./read-lock.nix { inherit lib; } {
-    src = dirOf yarnLock;
-    inherit lockFile yarnLock;
+  lock = import ./lock.nix { inherit lib lockFile yarnLock; };
+  # Serving captured downloads also works when both locks live outside the
+  # project; package manifests are only needed by its builder.
+  read = purifier.checkLock {
+    purifier = "yarn-berry-purifier";
+    inherit (lock) entries problems;
+    outputs = { };
   };
   entries = purifier.entriesFor pkgs.stdenv.hostPlatform.system read;
-  lock = builtins.seq entries (import ./lock.nix { inherit lib lockFile yarnLock; });
 in
 pkgs.callPackage ./served.nix {
   inherit purifier entries;
