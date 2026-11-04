@@ -73,6 +73,8 @@
   # The Node.js that runs Yarn and the project's scripts, and that the
   # packages' commands run on.
   node ? nodejs,
+  # Host graph tooling, independent of the selected project runtime.
+  captureNode ? nodejs,
   # The workspaces to build, by package name, in the order their scripts
   # run, or null for every package of the project. When it is a list, the
   # install covers only these workspaces and their dependencies
@@ -311,11 +313,11 @@ let
     runScript() {
       if ${
         if workspaces == null then "true" else "false"
-      } && node -e 'process.exit(require("./package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$1"; then
+      } && node -e 'var scripts = require("./package.json").scripts; process.exit(scripts && scripts[process.argv[1]] ? 0 : 1)' "$1"; then
         yarn run "$1"
       else
         ${lib.concatMapStrings (p: ''
-          if node -e 'process.exit(require(process.argv[2] + "/package.json").scripts?.[process.argv[1]] ? 0 : 1)' "$1" ./${lib.escapeShellArg p.dir}; then
+          if node -e 'var scripts = require(process.argv[2] + "/package.json").scripts; process.exit(scripts && scripts[process.argv[1]] ? 0 : 1)' "$1" ./${lib.escapeShellArg p.dir}; then
             yarn workspace ${lib.escapeShellArg p.name} run "$1"
           fi
         '') (builtins.filter (p: p.dir != "") ownPackages)}
@@ -500,9 +502,10 @@ let
     scripts = [ ];
     nodeModules = true;
     installPhase = ''
-      export NPM_PURIFIER_NPM_MODULES=${node}/lib/node_modules/npm/node_modules
+      export NPM_PURIFIER_NPM_MODULES=${captureNode}/lib/node_modules/npm/node_modules
+      export NPM_PURIFIER_TARGET_NODE=${node}/bin/node
       export NPM_PROJECTION_NIX=${nix}/bin/nix
-      node ${purifier.npmCaptureTool} "$PWD" ${rawRelease} "$out" ${
+      ${captureNode}/bin/node ${purifier.npmCaptureTool} "$PWD" ${rawRelease} "$out" ${
         writeText "yarn-berry-own-packages.json" (
           builtins.toJSON (
             map (p: {
