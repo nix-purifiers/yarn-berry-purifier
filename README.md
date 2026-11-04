@@ -239,6 +239,15 @@ devShells.${system}.default = pkgs.mkShell {
 
 ```
 
+### Graph helper runtime
+
+The builder's `node` selects the project runtime. `captureNode` selects the
+modern Node/npm tooling that inspects the installed graph, and defaults to
+nixpkgs' Node. The graph records the target's version, ABI and platform separately
+from the helper's runtime. Selecting an older `node` does not by itself establish
+that the project's locked Yarn release and plugin APIs can run on it; those
+native tool/runtime combinations need their own regression points.
+
 ### One-off builds without a project Nix file
 
 For an ad hoc build, the builder can also be evaluated directly from the
