@@ -1,0 +1,21 @@
+{
+  "name": "hello-berry",
+  "version": "1.0.0",
+  "bin": "bin/hello.js",
+  "files": [
+    "bin",
+    "dist",
+    "public"
+  ],
+  "scripts": {
+    "build": "node build.js && node build-browser.cjs",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "kleur": "^4.1.5"
+  },
+  "devDependencies": {
+    "is-odd": "^3.0.1"
+  },
+  "packageManager": "yarn@4.18.1"
+}

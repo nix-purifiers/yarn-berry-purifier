@@ -56,6 +56,7 @@
 {
   # The root of the Yarn project.
   src,
+  webAssets ? { },
   # Replaces fetchers of the purifier library, such as `fetchurl` with one
   # that sends credentials to a company mirror. The purifier library's
   # fetchEntry and tree take it unchanged.
@@ -530,20 +531,73 @@ let
         python3
         ;
     };
-  projections = projectionFor null;
+  packagesForWeb = lib.mapAttrs (
+    name: p:
+    let
+      package = mkPackage p;
+    in
+    lib.extendDerivation true {
+      projections = projectionFor [ name ] // webProjectionFor name package p.version;
+    } package
+  ) ownPackageSet;
+  ownPackagesForWeb = ownPackageSet;
+  webProjectionFor =
+    name: package: version:
+    lib.optionalAttrs (builtins.hasAttr name webAssets) (
+      (purifier.resourceProjections {
+        producer = package;
+        roots."." = "lib/node_modules/${name}/${webAssets.${name}}";
+        inherit runCommand python3;
+      })
+      // (purifier.webjarProjections {
+        producer = package;
+        assets = "${package}/lib/node_modules/${name}/${webAssets.${name}}";
+        artifactId = builtins.replaceStrings [ "@" "/" ] [ "" "__" ] name;
+        inherit version runCommand python3;
+      })
+    );
+  projections =
+    projectionFor null
+    // lib.optionalAttrs (webAssets != { }) (
+      purifier.jvmProjections {
+        repository = null;
+        dependencies = lib.mapAttrsToList (name: _: packagesForWeb.${name}) webAssets;
+        formats = [
+          "maven"
+          "ivy"
+        ];
+        inherit runCommand python3;
+      }
+    );
+
   release = rawRelease.overrideAttrs (previous: {
     passthru = (previous.passthru or { }) // {
       inherit projections;
     };
   });
 in
+assert
+  builtins.all (name: builtins.hasAttr name ownPackagesForWeb) (builtins.attrNames webAssets)
+  || throw "yarn-berry-purifier: webAssets must name packages owned by this project";
+assert
+  builtins.all (
+    path:
+    builtins.isString path
+    && path != ""
+    && !lib.hasPrefix "/" path
+    && builtins.all (
+      part:
+      !builtins.elem part [
+        ""
+        "."
+        ".."
+        "node_modules"
+      ]
+    ) (lib.splitString "/" path)
+  ) (builtins.attrValues webAssets)
+  || throw "yarn-berry-purifier: webAssets must select relative asset subdirectories, excluding node_modules";
 {
-  packages = lib.mapAttrs (
-    name: p:
-    lib.extendDerivation true {
-      projections = projectionFor [ name ];
-    } (mkPackage p)
-  ) ownPackageSet;
+  packages = packagesForWeb;
   inherit tests release projections;
   fetches = checked.entries;
 }
