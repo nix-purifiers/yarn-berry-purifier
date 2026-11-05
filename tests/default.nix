@@ -203,6 +203,10 @@ let
     '';
 in
 {
+  browser-projections = import ./browser-projections.nix {
+    inherit pkgs;
+    build = buildYarnBerryProject;
+  };
   composition-producer = app.packages.hello-berry;
   npm-projection =
     pkgs.runCommand "yarn-berry-npm-projection"
