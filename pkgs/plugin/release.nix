@@ -16,7 +16,7 @@
 }:
 let
   inherit (pkgs) lib;
-  raw = import ./lock.nix { inherit lib lockFile yarnLock; };
+  raw = import ../../lib-overlays/default/lock.nix { inherit lib lockFile yarnLock; };
   lock = builtins.seq (purifier.checkLock {
     purifier = "yarn-berry-purifier";
     inherit (raw) entries problems;

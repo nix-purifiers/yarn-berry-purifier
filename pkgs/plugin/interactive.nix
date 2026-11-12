@@ -18,7 +18,7 @@
 }:
 let
   inherit (pkgs) lib;
-  lock = import ./lock.nix { inherit lib lockFile yarnLock; };
+  lock = import ../../lib-overlays/default/lock.nix { inherit lib lockFile yarnLock; };
   # Serving captured downloads also works when both locks live outside the
   # project; package manifests are only needed by its builder.
   read = purifier.checkLock {
@@ -28,7 +28,7 @@ let
   };
   entries = purifier.entriesFor pkgs.stdenv.hostPlatform.system read;
 in
-pkgs.callPackage ./served.nix {
+pkgs.callPackage ../build-yarn-berry-project/served.nix {
   inherit purifier entries;
   inherit (lock) npmLocks externals;
 }

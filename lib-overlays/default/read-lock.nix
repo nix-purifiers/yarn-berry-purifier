@@ -5,11 +5,11 @@
 #
 #   purifier  "yarn-berry-purifier"
 #   entries   the download entries of the purifier library that the
-#             purifier lockfile locks (nix/lib/lock.nix): the downloads,
+#             purifier lockfile locks (lib-overlays/default/lock.nix): the downloads,
 #             each with `systems`, the git repositories Yarn clones, and
 #             the Yarn release from repo.yarnpkg.com
 #   outputs   the project's packages by name, as { version, dir, bin }
-#             (nix/lib/workspaces.nix)
+#             (lib-overlays/default/workspaces.nix)
 #   problems  why the lockfiles cannot be used, each naming the command
 #             that fixes it
 #
