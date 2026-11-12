@@ -4,7 +4,7 @@
 # the scope `pkgs.yarn-berry-purifier`, made with lib.makeScope. The scope
 # holds the packages of pkgs/ (`.plugin`, `.yarn` and
 # `.yarn-berry-purifier`) and the builder `.buildYarnBerryProject`
-# (nix/lib/build-yarn-berry-project.nix), a package for callPackage in that
+# (pkgs/build-yarn-berry-project/default.nix), a package for callPackage in that
 # scope. `.overrideScope` replaces what everything in the scope shares,
 # `.buildYarnBerryProject.override` replaces what the builder takes, and a
 # package written for callPackage takes the scope by name. A consumer that
@@ -25,7 +25,7 @@ in
       yarn-berry-purifier = scoped.yarn-berry-purifier.overrideScope (
         self: _: {
           inherit (closure-lib) purifier;
-          buildYarnBerryProject = self.callPackage ../../nix/lib/build-yarn-berry-project.nix {
+          buildYarnBerryProject = self.callPackage ../../pkgs/build-yarn-berry-project/default.nix {
             inherit (closure-lib) purifier;
           };
         }

@@ -8,7 +8,7 @@
   node,
   # The plugin, which answers Yarn's downloads from `dependencies`.
   plugin,
-  # The directory nix/lib/served.nix lays out.
+  # The directory pkgs/build-yarn-berry-project/served.nix lays out.
   dependencies,
   # The Yarn release that runs the install: a path relative to the project
   # root for a release in the project, or the fetched release.

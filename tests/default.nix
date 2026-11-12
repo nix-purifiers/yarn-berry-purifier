@@ -35,7 +35,7 @@ let
 
   # The directory the plugin serves fixtures/app from in interactive use
   # and after `yarn-berry-purifier prefetch`.
-  servedApp = import ../nix/lib/interactive.nix {
+  servedApp = import ../pkgs/plugin/interactive.nix {
     inherit purifier;
     pkgs = withOverlay;
     lockFile = ./fixtures/app/yarn-berry-purifier.lock.json;
@@ -410,7 +410,7 @@ in
 
         # readLock fails evaluation on a file that is not JSON.
         if LOCK="$TMPDIR/not-json.lock.json" nix eval --impure --json --expr '
-          (import ${../nix/lib}/read-lock.nix { lib = import ${pkgs.path}/lib; } {
+          (import ${../lib-overlays/default}/read-lock.nix { lib = import ${pkgs.path}/lib; } {
             src = ${./fixtures/app};
             lockFile = /. + builtins.getEnv "LOCK";
           }).problems
@@ -523,8 +523,8 @@ in
       digest = builtins.hashString "sha256" (
         lib.concatMapStrings builtins.readFile [
           ../plugin/purifier.cjs
-          ../nix/lib/lock.nix
-          ../nix/lib/read-lock.nix
+          ../lib-overlays/default/lock.nix
+          ../lib-overlays/default/read-lock.nix
           ./fixtures/update/package.json
           ./fixtures/update/yarn.lock
           ./fixtures/update/yarn-berry-purifier.lock.json
@@ -558,7 +558,7 @@ in
         fi
         grep -q '"\^4.0.0"' package.json
         problems="$(nix eval --impure --json --expr '
-          (import ${../nix/lib}/read-lock.nix { lib = import ${pkgs.path}/lib; } {
+          (import ${../lib-overlays/default}/read-lock.nix { lib = import ${pkgs.path}/lib; } {
             src = /. + builtins.getEnv "PWD";
           }).problems
         ')"
@@ -717,11 +717,11 @@ in
         touch $out
       '';
 
-  # `yarn-berry-purifier publish` builds the tarball nix/lib/publish.nix
+  # `yarn-berry-purifier publish` builds the tarball pkgs/plugin/publish.nix
   # names, which is the package's tarball in the release.
   publish-tarball =
     let
-      tarball = import ../nix/lib/publish.nix {
+      tarball = import ../pkgs/plugin/publish.nix {
         pkgs = withOverlay;
         src = ./fixtures/app;
         package = "hello-berry";

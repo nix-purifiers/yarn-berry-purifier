@@ -193,7 +193,7 @@ used, each naming the command that fixes it. A tool that reads every
 purifier, such as a generator of software bills of materials, calls it,
 and the builder checks it with the purifier library's `checkLock`.
 
-`nix/lib/build-yarn-berry-project.nix` documents the arguments. Besides
+`pkgs/build-yarn-berry-project/default.nix` documents the arguments. Besides
 `src`, they include `fetchers` (replaces fetchers of the purifier library,
 such as `fetchurl` for a company mirror or credentials), `lockFile`,
 `yarnLock`, `workspaces` (builds only the listed workspaces),

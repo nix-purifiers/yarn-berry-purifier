@@ -110,7 +110,7 @@ let
 
   # The lock in memory of the purifier contract, which checkLock fails
   # evaluation on when the lockfiles cannot be used.
-  rawLock = import ./lock.nix { inherit lib lockFile yarnLock; };
+  rawLock = import ../../lib-overlays/default/lock.nix { inherit lib lockFile yarnLock; };
   supplied =
     if dependencies == [ ] || rawLock.problems != [ ] then
       {
@@ -150,7 +150,7 @@ let
             '';
       in
       lib.importJSON result;
-  read = import ./read-lock.nix { inherit lib; } {
+  read = import ../../lib-overlays/default/read-lock.nix { inherit lib; } {
     inherit src yarnLock lockFile;
     excludedPaths = supplied.paths;
     excludedRemotes = supplied.remotes;
@@ -158,7 +158,7 @@ let
   checked = purifier.checkLock read;
   # The rest of the purifier lockfile, read only after the check.
   lock = builtins.seq checked (
-    import ./lock.nix {
+    import ../../lib-overlays/default/lock.nix {
       inherit lib lockFile yarnLock;
       excludedPaths = supplied.paths;
       excludedRemotes = supplied.remotes;
@@ -190,7 +190,7 @@ let
   }
   // fetchers;
 
-  allPackages = import ./workspaces.nix { inherit lib src; };
+  allPackages = import ../../lib-overlays/default/workspaces.nix { inherit lib src; };
   ownPackageSet =
     if workspaces == null then
       allPackages

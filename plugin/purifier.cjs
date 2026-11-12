@@ -120,7 +120,7 @@ function canonical(value) {
 
 // The hash a purifier lockfile records of its own content: the SHA-256 of
 // the lockfile without `contentHash`, written as canonical JSON with no
-// whitespace. nix/lib/lock.nix computes the same hash.
+// whitespace. lib-overlays/default/lock.nix computes the same hash.
 function contentHash(lock) {
   const { contentHash: _, ...rest } = lock;
   return sha256(JSON.stringify(canonical(rest)));
@@ -600,7 +600,7 @@ module.exports = {
             ...(inputContext.projectInputs.length ? {projectInputs:inputContext.projectInputs} : {}),
             yarn,
             // A download's mirrors follow from its URL by the rule of
-            // registryMirrors, which nix/lib/lock.nix applies, so the
+            // registryMirrors, which lib-overlays/default/lock.nix applies, so the
             // lockfile leaves them out.
             downloads: [...downloads.values()]
               .map((d) => ({ ...d, systems: d.systems.sort() }))
@@ -1038,7 +1038,7 @@ function writeLock(lockPath, content) {
 
 // Yarn's registry and npm's registry serve the same tarballs at the same
 // paths, so a tarball from either has the other as its mirror.
-// nix/lib/lock.nix applies the same rule to every download's URL.
+// lib-overlays/default/lock.nix applies the same rule to every download's URL.
 function registryMirrors(url) {
   const yarn = "https://registry.yarnpkg.com/";
   const npm = "https://registry.npmjs.org/";

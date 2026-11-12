@@ -37,9 +37,9 @@
   # library's entriesFor returns them: the downloads, the git repositories
   # Yarn clones and the Yarn release.
   entries,
-  # The external yarn.lock files, as nix/lib/lock.nix returns them.
+  # The external yarn.lock files, as lib-overlays/default/lock.nix returns them.
   externals,
-  # The resolved package-lock.json files, as nix/lib/lock.nix returns them.
+  # The resolved package-lock.json files, as lib-overlays/default/lock.nix returns them.
   npmLocks ? [ ],
   # Replaces fetchers of the purifier library; its fetchEntry and tree take
   # it unchanged.
